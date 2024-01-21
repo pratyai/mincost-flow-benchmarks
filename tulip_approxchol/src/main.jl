@@ -17,12 +17,12 @@ function parse_cmdargs()
     arg_type = String
     required = true
     "-o"
-    help = "output spec file"
+    help = "path to store the output spec (if absent, will print on stdout)"
     arg_type = Union{Nothing,String}
     required = false
     default = nothing
     "-s"
-    help = "output solution flow-vectors directory (optional)"
+    help = "output solution flow-vectors directory (if absent, will not store solutions)"
     arg_type = Union{Nothing,String}
     required = false
     default = nothing
@@ -40,9 +40,21 @@ function main()
   @show args
 
   local warmup_spec = args["t"]
+  if !isnothing(warmup_spec)
+    warmup_spec = strip(warmup_spec)
+  end
   local input_spec = args["i"]
+  if !isnothing(input_spec)
+    input_spec = strip(input_spec)
+  end
   local output_spec = args["o"]
+  if !isnothing(output_spec)
+    output_spec = strip(output_spec)
+  end
   local solution_dir = args["s"]
+  if !isnothing(solution_dir)
+    solution_dir = strip(solution_dir)
+  end
 
   local probspec = CSV.read(input_spec, DataFrame)
 

@@ -1081,7 +1081,9 @@ weakdeps = ["Random", "Test"]
 
 [[deps.Tulip]]
 deps = ["CodecBzip2", "CodecZlib", "Krylov", "LDLFactorizations", "LinearAlgebra", "LinearOperators", "Logging", "MathOptInterface", "Printf", "QPSReader", "SparseArrays", "SuiteSparse", "TOML", "Test", "TimerOutputs"]
-path = "/Users/pmz/gitspace/Tulip.jl/"
+git-tree-sha1 = "7ef134463d2d61703af9dc9765a1f533e8720241"
+repo-rev = "add-solution-time"
+repo-url = "https://github.com/pratyai/Tulip.jl"
 uuid = "6dd1b50a-3aae-11e9-10b5-ef983d2400fa"
 version = "0.9.6"
 
