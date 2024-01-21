@@ -56,11 +56,10 @@ function main()
     solution_dir = strip(solution_dir)
   end
 
-  local probspec = CSV.read(input_spec, DataFrame)
 
   if !isnothing(warmup_spec)
-    local probspec = CSV.read(warmup_spec, DataFrame)
-    for r in eachrow(probspec)
+    local warmspec = CSV.read(warmup_spec, DataFrame)
+    for r in eachrow(warmspec)
       println("warmup: ", r[:name], " => ", r[:input_file])
 
       local indimacs::String = r[:input_file]
@@ -72,6 +71,7 @@ function main()
     end
   end
 
+  local probspec = CSV.read(input_spec, DataFrame)
   local out = DataFrame(
     name = String[],
     status = String[],
@@ -88,7 +88,7 @@ function main()
     local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
 
     # Save solution if asked for.
-    local sol_file = nothing
+    local sol_file = ""
     if !isnothing(solution_dir)
       mkpath(solution_dir)
       sol_file = joinpath(solution_dir, r[:name] * ".jld2")
