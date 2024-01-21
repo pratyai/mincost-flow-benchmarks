@@ -66,7 +66,7 @@ function main()
 
       local indimacs::String = r[:input_file]
       local netw = Dimacs.ReadDimacs(indimacs)
-      local lp = Integration.construct_ipopt_model(netw, Float64)
+      local lp = Integration.construct_ipopt_model(netw)
       local lp, status, iters, seconds = Integration.solve_ipopt_model(lp)
 
       # Throw away everything because this is just an warmup.
@@ -85,15 +85,15 @@ function main()
 
     local indimacs::String = r[:input_file]
     local netw = Dimacs.ReadDimacs(indimacs)
-    local lp = Integration.construct_ipopt_model(netw, Float64)
+    local lp = Integration.construct_ipopt_model(netw)
     local lp, status, iters, seconds = Integration.solve_ipopt_model(lp)
-
+    local x::Vector{Float64} = JuMP.value.(lp[:x])
     # Save solution if asked for.
     local sol_file = nothing
     if !isnothing(solution_dir)
       mkpath(solution_dir)
       sol_file = joinpath(solution_dir, r[:name] * ".jld2")
-      jldsave(sol_file, true; x = JuMP.values.(lp[:x]))
+      jldsave(sol_file, true; x = x)
     end
 
     push!(

@@ -11,12 +11,12 @@ using Random
 using JuMP
 using Ipopt
 
-function construct_ipopt_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Number}
+function construct_ipopt_model(netw::Dimacs.McfpNet)
   Random.seed!(1)
   local A = sparse(Int8.(netw.G.IncidenceMatrix))
-  local b = Tv.(netw.Demand)
-  local u = Tv.(netw.Cap)
-  local c = Tv.(netw.Cost)
+  local b = netw.Demand
+  local u = netw.Cap
+  local c = netw.Cost
   local n, m = size(A)
 
   local lp = JuMP.Model(Ipopt.Optimizer)
@@ -29,7 +29,7 @@ function construct_ipopt_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Num
   return lp
 end
 
-function solve_ipopt_model(lp::JuMP.Model) where {Tv<:Number}
+function solve_ipopt_model(lp::JuMP.Model)
   JuMP.optimize!(lp)
 
   local status = JuMP.termination_status(lp)
