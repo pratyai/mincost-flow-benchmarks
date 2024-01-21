@@ -1,4 +1,6 @@
 using FromFile
+@from "Dimacs.jl" import Dimacs
+
 using ArgParse
 using CSV
 using DataFrames
@@ -45,6 +47,8 @@ function main()
   local probnames = String[]
   local probpaths = String[]
   local probbytes = Int[]
+  local probvtxs = Int[]
+  local probarcs = Int[]
 
   for p in probs
     local probname = split(basename(p), ".")[1]
@@ -82,12 +86,22 @@ function main()
     end
 
     @assert !isnothing(probpath)
+    local netw = Dimacs.ReadDimacs(probpath)
+
     push!(probnames, probname)
     push!(probpaths, probpath)
     push!(probbytes, lstat(probpath).size)
+    push!(probvtxs, netw.G.n)
+    push!(probarcs, netw.G.m)
   end
 
-  local out = DataFrame(name = probnames, input_file = probpaths, bytes = probbytes)
+  local out = DataFrame(
+    name = probnames,
+    input_file = probpaths,
+    bytes = probbytes,
+    vertices = probvtxs,
+    arcs = probarcs,
+  )
   if !isnothing(specfile)
     mkpath(dirname(specfile))
     CSV.write(specfile, out)

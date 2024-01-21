@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "3cc0a4910af44c01794d726d67f42d9c7ba00536"
+project_hash = "bd01da55ecda3b7997c5f411d670662c87663f05"
 
 [[deps.ArgParse]]
 deps = ["Logging", "TextWrap"]
@@ -19,6 +19,11 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BufferedStreams]]
+git-tree-sha1 = "4ae47f9a4b1dc19897d3743ff13685925c5202ec"
+uuid = "e1450e63-4bb3-523b-b2a4-4ffa8c0fd77d"
+version = "1.2.1"
 
 [[deps.CSV]]
 deps = ["CodecZlib", "Dates", "FilePathsBase", "InlineStrings", "Mmap", "Parsers", "PooledArrays", "PrecompileTools", "SentinelArrays", "Tables", "Unicode", "WeakRefStrings", "WorkerUtilities"]
@@ -101,6 +106,12 @@ version = "0.1.5"
 [[deps.Future]]
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
+
+[[deps.GZip]]
+deps = ["Libdl", "Zlib_jll"]
+git-tree-sha1 = "0085ccd5ec327c077ec5b91a5f937b759810ba62"
+uuid = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
+version = "0.6.2"
 
 [[deps.InlineStrings]]
 deps = ["Parsers"]
@@ -244,6 +255,12 @@ version = "1.3.0"
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
+
+[[deps.Scanf]]
+deps = ["BufferedStreams"]
+git-tree-sha1 = "cd8f9da92f751a1fc421120c66971d008d695cdb"
+uuid = "6ef1bc8b-493b-44e1-8d40-549aa65c4b41"
+version = "0.5.4"
 
 [[deps.SentinelArrays]]
 deps = ["Dates", "Random"]
