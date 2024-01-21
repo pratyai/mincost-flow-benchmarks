@@ -47,9 +47,7 @@ The following columns are required:
 
 Every benchmarking experiemnts can add additional columns containing scalar metrics or an URL to different files with complicated structures. There is no other real requirement than this. But for making a good comparisons, the different experiments should agree upon the semantics of the column (identified by its header) beforehand.
 
-### Tulip + ApproxSDDM (mostly default implementation)
-
-For example, our Tulip + ApproxSDDM solver, which is what we are mostly intereted in for the moment, should also produce the following columns:
+For example, our Tulip + ApproxSDDM solver (and all the others covered so far), which is what we are mostly intereted in for the moment, should also produce the following columns:
 
 - Status (`status`: `string`): The solution status string from Tulip.
 - Solution Time in Seconds (`time_s`: `float`): The solution time reported by Tulip.
