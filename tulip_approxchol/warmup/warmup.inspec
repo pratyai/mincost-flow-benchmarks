@@ -1,2 +1,2 @@
-name,format,input_file
-netgen_8_08a,DIMACS,warmup/netgen_8_08a.min.gz
+name,input_file,bytes
+netgen_8_08a,warmup/netgen_8_08a.min.gz,15936

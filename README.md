@@ -55,3 +55,7 @@ For example, our Tulip + ApproxSDDM solver, which is what we are mostly interete
 - Solution Time in Seconds (`time_s`: `float`): The solution time reported by Tulip.
 - Number of Iterations (`iters`: `int`): The number of iterations reported by Tulip.
 - [Optional] Solution file (`solution_file`: `string`): If we requested for the solution to be stored in a file, the path of that file.
+
+## How to produce input specs?
+
+See `tools/README.md`
