@@ -1,4 +1,4 @@
-# Tulip + ApproxSDDM (mostly default implementation) Benchmarkign
+# Tulip + ApproxSDDM (mostly default implementation) Benchmarking
 
 The exact flow solution recovery is not covered here. If verifying or exact solution recovery is needed, have the tool write the solutions into a directory (`-s` flag), and then verify that solution against the input problem and the true solution.
 
