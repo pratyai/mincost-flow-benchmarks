@@ -3,6 +3,7 @@ module Dimacs
 using SparseArrays
 using Scanf
 using Printf
+using GZip
 
 # Problem description reader utility
 
@@ -59,7 +60,7 @@ function ReadDimacs(path::String)
   local C, U, B = nothing, nothing, nothing
 
   local nxtarc = 1
-  local f = open(path)
+  local f = endswith(path, ".gz") ? GZip.open(path) : Base.open(path)
   local content = read(f, String)
   f = IOBuffer(content)
   while !eof(f)
