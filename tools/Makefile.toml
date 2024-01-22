@@ -8,3 +8,7 @@ dependencies = ["juliafmt"]
 [tasks.lemon]
 command = "julia"
 args = ["--project=.", "produce_lemon_netgen_input_spec.jl", "${@}"]
+
+[tasks.orange]
+command = "julia"
+args = ["--project=.", "produce_comparisons.jl", "${@}"]
