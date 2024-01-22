@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "0faba53f309b5c0be8d5e2e19927e1d6602d4a78"
+project_hash = "caff8cbd08faf9c6526e1d75aa834518d3bf7cc8"
 
 [[deps.AMD]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse_jll"]
@@ -197,6 +197,12 @@ deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialF
 git-tree-sha1 = "23163d55f885173722d1e4cf0f6110cdbaf7e272"
 uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
 version = "1.15.1"
+
+[[deps.Dimacs]]
+deps = ["GZip", "Printf", "Scanf", "SparseArrays"]
+path = "../dimacs"
+uuid = "56f16b60-4eb9-43c5-8143-b5f1c39a6b17"
+version = "0.1.0"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]

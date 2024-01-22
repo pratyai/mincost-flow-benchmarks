@@ -1,2 +1,2 @@
 name,status,time_s,iters,solution_file
-netgen_8_08a,LOCALLY_SOLVED,6.8816609382629395,235,warmup/sol/netgen_8_08a.jld2
+netgen_8_08a,LOCALLY_SOLVED,5.700066089630127,235,warmup/sol/netgen_8_08a.jld2

@@ -1,5 +1,5 @@
 using FromFile
-@from "Dimacs.jl" import Dimacs
+using Dimacs
 @from "Integration.jl" import Integration
 
 using ArgParse

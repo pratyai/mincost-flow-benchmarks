@@ -1,7 +1,7 @@
 module Integration
 
 using FromFile
-@from "Dimacs.jl" import Dimacs
+using Dimacs
 
 using SparseArrays
 using LinearAlgebra
