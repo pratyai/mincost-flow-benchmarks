@@ -7,5 +7,5 @@ julia --project=. produce_lemon_netgen_input_spec.jl <LIST OF PROBLEM NAMES / PA
 ```
 
 ```sh
-bat lemon_prolems.txt | grep a | head -n <SOME NUMBER OF ENTRIES> | xargs julia --project=. produce_lemon_netgen_input_spec.jl -p /tmp/data -o ../small.inspec
+bat lemon_problems.txt | grep a | head -n <SOME NUMBER OF ENTRIES> | xargs julia --project=. produce_lemon_netgen_input_spec.jl -p /tmp/data -o ../small.inspec
 ```
