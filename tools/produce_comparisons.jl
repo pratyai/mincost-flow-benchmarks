@@ -30,6 +30,8 @@ function main()
   local args = parse_cmdargs()
   @show args
 
+  CairoMakie.activate!(; px_per_unit = 10.0)
+
   local probs = [[strip(x) for x in split(f, "=")] for f in args["outspecs"]]
   local inspec = strip(args["i"])
   local outdir = strip(args["o"])
@@ -37,9 +39,9 @@ function main()
   local spec = CSV.read(inspec, DataFrame)
   local ospecs = Dict(name => CSV.read(ospec, DataFrame) for (name, ospec) in probs)
 
-  for metric in [:time_s]
-    local f = Figure()
-    local ax = Axis(f[1, 1], xlabel = "#arcs", ylabel = string(metric), yscale = log10)
+  local f = Figure()
+  for (axid, metric) in enumerate([:time_s, :iters])
+    local ax = Axis(f[axid, 1], xlabel = "#arcs", ylabel = string(metric))
     for (i, (name, ospec)) in enumerate(ospecs)
       local succ = st -> st in ["Trm_Optimal", "LOCALLY_SOLVED"]
       local notsucc = st -> !succ(st)
@@ -53,19 +55,25 @@ function main()
         label = name,
         marker = :circle,
         markersize = 5,
+        alpha = 0.5,
         color = Cycled(i),
       )
       scatter!(
         ax,
         bad[:, :arcs],
         bad[:, metric],
-        marker = :xcross,
-        markersize = 8,
+        marker = :circle,
+        markersize = 5,
+        alpha = 0.5,
         color = Cycled(i),
+        strokecolor = :red,
+        strokewidth = 0.5,
       )
     end
-    axislegend()
-    display(f)
+    axislegend(ax; position = :lt, nbanks = 4, backgroundcolor = :transparent)
   end
+  mkpath(outdir)
+  save(joinpath(outdir, split(basename(inspec), ".")[1] * ".svg"), f)
+  display(f)
 end
 main()
