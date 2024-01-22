@@ -105,6 +105,10 @@ function main()
         :solution_file => sol_file,
       ),
     )
+    if !isnothing(output_spec)
+      mkpath(dirname(output_spec))
+      CSV.write(output_spec, out)
+    end
   end
 
   if !isnothing(output_spec)
