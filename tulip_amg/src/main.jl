@@ -79,8 +79,24 @@ function main()
     iters = Int[],
     solution_file = String[],
   )
+  if !isnothing(output_spec)
+    try
+      out = CSV.read(output_spec, DataFrame)
+    catch e
+      println(
+        "output spec `",
+        output_spec,
+        "` already exits but cannot be read as a table: ",
+        e,
+      )
+    end
+  end
   for r in eachrow(probspec)
     println("processing: ", r[:name], " => ", r[:input_file])
+    if r[:name] in out[:, :name]
+      println("record already exists for `", r[:name], "`; skipping it")
+      continue
+    end
 
     local indimacs::String = r[:input_file]
     local netw = Dimacs.ReadDimacs(indimacs)
