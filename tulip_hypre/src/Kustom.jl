@@ -32,7 +32,7 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   hypre_solve::Function  # Solver for the SDDM system that yields `dy`
 end
 
-Tulip.KKT.backend(::Solver) = "Mcfp Tulip K1 AlgebraicMultigrid"
+Tulip.KKT.backend(::Solver) = "Mcfp Tulip K1 HYPRE"
 Tulip.KKT.linear_system(::Solver) = "Normal equations (K1)"
 
 function Tulip.KKT.setup(
