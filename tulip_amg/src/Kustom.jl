@@ -29,6 +29,7 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   K::SparseMatrixCSC{Tv,Ti} # KKT matrix
   ξ::Vector{Tv} # RHS of KKT system
   # Laplacians related
+  prec::AlgebraicMultigrid.MultiLevel
   amg_solve::Function  # Solver for the SDDM system that yields `dy`
 end
 
@@ -48,11 +49,12 @@ function Tulip.KKT.setup(
   local ξ = zeros(Tv, m)
   local K = sparse(A * A') + spdiagm(0 => regD)
 
+  local prec = ruge_stuben(sparse(Symmetric(K)))
   local amg_solve = function (b)
-    return AlgebraicMultigrid._solve(ruge_stuben(sparse(Symmetric(K))), b)
+    return AlgebraicMultigrid._solve(prec, b)
   end
 
-  return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, amg_solve)
+  return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, prec, amg_solve)
 end
 
 function Tulip.KKT.update!(
@@ -79,8 +81,9 @@ function Tulip.KKT.update!(
   local D = spdiagm(one(Tv) ./ (kkt.θ .+ kkt.regP))
   kkt.K = (kkt.A * D * kkt.A') + spdiagm(0 => kkt.regD)
 
+  kkt.prec = ruge_stuben(sparse(Symmetric(kkt.K)))
   kkt.amg_solve = function (b)
-    return AlgebraicMultigrid._solve(ruge_stuben(sparse(Symmetric(kkt.K))), b)
+    return AlgebraicMultigrid._solve(kkt.prec, b)
   end
 
   return nothing
