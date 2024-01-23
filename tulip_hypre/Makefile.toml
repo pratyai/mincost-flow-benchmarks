@@ -1,0 +1,10 @@
+[tasks.juliafmt]
+command = "julia"
+args = ["-e", "using JuliaFormatter; format(pwd(), indent=2);"]
+
+[tasks.nice]
+dependencies = ["juliafmt"]
+
+[tasks.run]
+command = "julia"
+args = ["--project=.", "src/main.jl", "${@}"]
