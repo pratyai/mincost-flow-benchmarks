@@ -78,7 +78,7 @@ function main()
     iters = Int[],
     solution_file = String[],
   )
-  if !isnothing(output_spec)
+  if !isnothing(output_spec) && isfile(output_spec)
     try
       out = CSV.read(output_spec, DataFrame)
     catch e
