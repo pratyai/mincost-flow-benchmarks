@@ -22,8 +22,8 @@ function parse_cmdargs()
     "problems"
     help = "list of the paths (or just names of `-p` is provided) of the problems we want to cover in the input spec."
     arg_type = String
-    nargs = '+'
-    required = true
+    nargs = '*'
+    required = false
   end
   return parse_args(s)
 end
@@ -44,13 +44,35 @@ function main()
     specfile = strip(specfile)
   end
 
-  local probnames = String[]
-  local probpaths = String[]
-  local probbytes = Int[]
-  local probvtxs = Int[]
-  local probarcs = Int[]
-
+  local out = DataFrame(
+    name = String[],
+    input_file = String[],
+    bytes = Int[],
+    vertices = Int[],
+    arcs = Int[],
+  )
+  allowmissing!(out)
+  if !isnothing(specfile) && isfile(specfile)
+    # use if the specfile already exists to avoid downloading unnecessary data.
+    local t = CSV.read(specfile, DataFrame)
+    append!(out, t; cols = :subset)
+  end
   for p in probs
+    # clear/insert the rows which are explicitly requested for
+    if p in out[:, :name]
+      out[out.name.==p, :input_file] .= missing
+    else
+      local probname = split(basename(p), ".")[1]
+      push!(out, Dict(:name => probname); cols = :subset)
+    end
+  end
+  @assert nrow(out) > 0
+
+  for pr in eachrow(out)
+    local p = pr[:name]
+    if !ismissing(pr[:input_file]) && isfile(pr[:input_file])
+      continue
+    end
     local probname = split(basename(p), ".")[1]
     local probpath = nothing
 
@@ -86,22 +108,14 @@ function main()
     end
 
     @assert !isnothing(probpath)
+    @assert probname in out[:, :name]
     local netw = Dimacs.ReadDimacs(probpath)
-
-    push!(probnames, probname)
-    push!(probpaths, probpath)
-    push!(probbytes, lstat(probpath).size)
-    push!(probvtxs, netw.G.n)
-    push!(probarcs, netw.G.m)
+    out[out.name.==probname, :input_file] .= probpath
+    out[out.name.==probname, :bytes] .= lstat(probpath).size
+    out[out.name.==probname, :vertices] .= netw.G.n
+    out[out.name.==probname, :arcs] .= netw.G.m
   end
 
-  local out = DataFrame(
-    name = probnames,
-    input_file = probpaths,
-    bytes = probbytes,
-    vertices = probvtxs,
-    arcs = probarcs,
-  )
   if !isnothing(specfile)
     mkpath(dirname(specfile))
     CSV.write(specfile, out)
