@@ -12,3 +12,51 @@ args = ["--project=.", "produce_lemon_netgen_input_spec.jl", "${@}"]
 [tasks.orange]
 command = "julia"
 args = ["--project=.", "produce_comparisons.jl", "${@}"]
+
+[tasks.orange-netgen_8_40]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_comparisons.jl",
+  "-i",
+  "../netgen_8_40.inspec",
+  "-o",
+  "../artefacts",
+  "basic_tulip=../basic_tulip/netgen_8_40.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_8_40.outspec",
+  "tulip_amg=../tulip_amg/netgen_8_40.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_8_40.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_8_40.outspec",
+]
+
+[tasks.orange-netgen_sr_40]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_comparisons.jl",
+  "-i",
+  "../netgen_sr_40.inspec",
+  "-o",
+  "../artefacts",
+  "basic_tulip=../basic_tulip/netgen_sr_40.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_sr_40.outspec",
+  "tulip_amg=../tulip_amg/netgen_sr_40.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_sr_40.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_sr_40.outspec",
+]
+
+[tasks.orange-netgen_deg_40]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_comparisons.jl",
+  "-i",
+  "../netgen_deg_40.inspec",
+  "-o",
+  "../artefacts",
+  "basic_tulip=../basic_tulip/netgen_deg_40.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_deg_40.outspec",
+  "tulip_amg=../tulip_amg/netgen_deg_40.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_deg_40.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_deg_40.outspec",
+]

@@ -5,6 +5,7 @@ using ArgParse
 using CSV
 using DataFrames
 using CairoMakie
+using ColorSchemes
 
 function parse_cmdargs()
   s = ArgParseSettings()
@@ -31,6 +32,10 @@ function main()
   @show args
 
   CairoMakie.activate!(; px_per_unit = 10.0)
+  local fontsize_theme = Theme(fontsize = 10)
+  update_theme!(fontsize_theme)
+  # local color_theme = Theme(palette = (color = ColorSchemes.tol_medcontrast,))
+  # update_theme!(color_theme)
 
   local probs = [[strip(x) for x in split(f, "=")] for f in args["outspecs"]]
   local inspec = strip(args["i"])
@@ -42,35 +47,39 @@ function main()
   local f = Figure()
   for (axid, metric) in enumerate([:time_s, :iters])
     local ax = Axis(f[axid, 1], xlabel = "#arcs", ylabel = string(metric))
+    local legentries = []
     for (i, (name, ospec)) in enumerate(ospecs)
       local succ = st -> st in ["Trm_Optimal", "LOCALLY_SOLVED"]
       local notsucc = st -> !succ(st)
       local good = innerjoin(spec, ospec[succ.(ospec.status), [:name, metric]], on = :name)
       local bad =
         innerjoin(spec, ospec[notsucc.(ospec.status), [:name, metric]], on = :name)
-      scatter!(
+      local sc1 = scatter!(
         ax,
         good[:, :arcs],
         good[:, metric],
-        label = name,
         marker = :circle,
         markersize = 5,
-        alpha = 0.5,
         color = Cycled(i),
       )
-      scatter!(
+      local sc2 = scatter!(
         ax,
         bad[:, :arcs],
         bad[:, metric],
-        marker = :circle,
+        marker = :xcross,
         markersize = 5,
-        alpha = 0.5,
         color = Cycled(i),
         strokecolor = :red,
-        strokewidth = 0.5,
+        strokewidth = 0.8,
       )
+      push!(legentries, (name, [sc1]))
     end
-    axislegend(ax; position = :lt, nbanks = 4, backgroundcolor = :transparent)
+    f[axid, 2] = Legend(
+      f,
+      [en[2] for en in legentries],
+      [en[1] for en in legentries],
+      framevisible = false,
+    )
   end
   mkpath(outdir)
   save(joinpath(outdir, split(basename(inspec), ".")[1] * ".svg"), f)
