@@ -26,6 +26,15 @@ function construct_ipopt_model(netw::Dimacs.McfpNet)
   @constraint(lp, x <= u)
   @objective(lp, Min, c' * x)
 
+  #=
+  set_attribute(lp, "linear_solver", "pardiso")
+  set_attribute(
+    lp,
+    "pardisolib",
+    "/Users/pmz/Downloads/panua-pardiso-20230908-mac_x86/lib/libpardiso.dylib",
+  )
+  =#
+
   return lp
 end
 
