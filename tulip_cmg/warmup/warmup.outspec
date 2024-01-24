@@ -1,0 +1,2 @@
+name,status,time_s,iters,solution_file
+netgen_8_08a,Trm_Optimal,0.27459809500000004,12,warmup/sol/netgen_8_08a.jld2
