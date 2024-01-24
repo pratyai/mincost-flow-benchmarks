@@ -22,11 +22,12 @@ args = [
   "../netgen_8_40.inspec",
   "-o",
   "../artefacts",
-  "basic_tulip=../basic_tulip/netgen_8_40.outspec",
+  # "basic_tulip=../basic_tulip/netgen_8_40.outspec",
   # "basic_ipopt=../basic_ipopt/netgen_8_40.outspec",
   "tulip_amg=../tulip_amg/netgen_8_40.outspec",
   "tulip_approxchol=../tulip_approxchol/netgen_8_40.outspec",
   "tulip_hypre=../tulip_hypre/netgen_8_40.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_8_40.outspec",
 ]
 
 [tasks.orange-netgen_sr_40]
@@ -38,11 +39,12 @@ args = [
   "../netgen_sr_40.inspec",
   "-o",
   "../artefacts",
-  "basic_tulip=../basic_tulip/netgen_sr_40.outspec",
+  # "basic_tulip=../basic_tulip/netgen_sr_40.outspec",
   # "basic_ipopt=../basic_ipopt/netgen_sr_40.outspec",
   "tulip_amg=../tulip_amg/netgen_sr_40.outspec",
   "tulip_approxchol=../tulip_approxchol/netgen_sr_40.outspec",
   "tulip_hypre=../tulip_hypre/netgen_sr_40.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_sr_40.outspec",
 ]
 
 [tasks.orange-netgen_deg_40]
@@ -54,9 +56,10 @@ args = [
   "../netgen_deg_40.inspec",
   "-o",
   "../artefacts",
-  "basic_tulip=../basic_tulip/netgen_deg_40.outspec",
+  # "basic_tulip=../basic_tulip/netgen_deg_40.outspec",
   # "basic_ipopt=../basic_ipopt/netgen_deg_40.outspec",
   "tulip_amg=../tulip_amg/netgen_deg_40.outspec",
   "tulip_approxchol=../tulip_approxchol/netgen_deg_40.outspec",
   "tulip_hypre=../tulip_hypre/netgen_deg_40.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_deg_40.outspec",
 ]
