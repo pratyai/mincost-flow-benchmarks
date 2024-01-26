@@ -92,4 +92,17 @@ function ReadDimacs(path::String)
   return netw
 end
 
+function WriteDimacs(path::String, G::McfpNet)
+  GZip.open(path, "w") do f
+    @printf(f, "p min %d %d\n", G.G.n, G.G.m)
+    for i = 1:G.G.n
+      @printf(f, "n %d %d\n", i, -G.Demand[i])
+    end
+    for i = 1:G.G.m
+      u, v = G.G.EdgeList[i, :]
+      @printf(f, "a %d %d 0 %d %d\n", u, v, G.Cap[i], G.Cost[i])
+    end
+  end
+end
+
 end

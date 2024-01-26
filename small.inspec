@@ -1,0 +1,2 @@
+name,input_file,bytes,vertices,arcs
+MaxPlanck/shallow_water1,/tmp/data/MaxPlanck/shallow_water1.min.gz,2228764,81920,245760

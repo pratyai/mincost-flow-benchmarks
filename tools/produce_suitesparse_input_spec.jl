@@ -98,6 +98,7 @@ function main()
         mkpath(dirname(probpath))
         mv(tmpat, probpath; force = true)
         # but then we have to produce a min-cost flow on it
+        local mingz_path = joinpath(probdir, probname * ".min.gz")
         local A::SparseMatrixCSC = read(MAT.matopen(probpath), "Problem")["A"]
         local n = size(A, 1)
         # generate edges in both directions
@@ -129,6 +130,8 @@ function main()
           end
         end
         local netw = Dimacs.McfpNet(G = G, Cost = costs, Cap = caps, Demand = demands)
+        Dimacs.WriteDimacs(mingz_path, netw)
+        probpath = mingz_path
       else
         probpath = actp
       end
@@ -143,6 +146,13 @@ function main()
 
     @assert !isnothing(probpath)
     @assert probname in out[:, :name]
+    @assert !isnothing(probpath)
+    @assert probname in out[:, :name]
+    local netw = Dimacs.ReadDimacs(probpath)
+    out[out.name.==probname, :input_file] .= probpath
+    out[out.name.==probname, :bytes] .= lstat(probpath).size
+    out[out.name.==probname, :vertices] .= netw.G.n
+    out[out.name.==probname, :arcs] .= netw.G.m
   end
 
   if !isnothing(specfile)
