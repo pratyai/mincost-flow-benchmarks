@@ -5,6 +5,8 @@ using ArgParse
 using CSV
 using DataFrames
 using Downloads
+using MAT
+using SparseArrays
 
 function parse_cmdargs()
   s = ArgParseSettings()
@@ -28,7 +30,7 @@ function parse_cmdargs()
   return parse_args(s)
 end
 
-const NETGEN_URL = "http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/"
+const SS_URL = "https://suitesparse-collection-website.herokuapp.com/mat/"
 
 function main()
   local args = parse_cmdargs()
@@ -62,8 +64,7 @@ function main()
     if p in out[:, :name]
       out[out.name.==p, :input_file] .= missing
     else
-      local probname = split(basename(p), ".")[1]
-      push!(out, Dict(:name => probname); cols = :subset)
+      push!(out, Dict(:name => p); cols = :subset)
     end
   end
   @assert nrow(out) > 0
@@ -73,7 +74,7 @@ function main()
     if !ismissing(pr[:input_file]) && isfile(pr[:input_file])
       continue
     end
-    local probname = split(basename(p), ".")[1]
+    local probname = p
     local probpath = nothing
 
     # first handle the corner cases
@@ -82,7 +83,7 @@ function main()
       mkpath(probdir)
       local actp = nothing
       # try to find a few other options
-      for ap in [p, p * ".min", p * ".min.gz"]
+      for ap in [p, p * ".min.gz"]
         if isfile(joinpath(probdir, ap))
           actp = joinpath(probdir, ap)
           break
@@ -90,11 +91,44 @@ function main()
       end
       if isnothing(actp)
         # download as a last resort
-        local dfrm = joinpath(NETGEN_URL, probname * ".min.gz")
-        probpath = joinpath(probdir, probname * ".min.gz")
+        local dfrm = joinpath(SS_URL, probname * ".mat")
+        probpath = joinpath(probdir, probname * ".mat")
         println("downloading: ", dfrm, " to ", probpath)
         local tmpat = Downloads.download(dfrm)
-        mv(tmpat, probpath)
+        mkpath(dirname(probpath))
+        mv(tmpat, probpath; force = true)
+        # but then we have to produce a min-cost flow on it
+        local A::SparseMatrixCSC = read(MAT.matopen(probpath), "Problem")["A"]
+        local n = size(A, 1)
+        # generate edges in both directions
+        local us::Vector{Int}, vs::Vector{Int} = [], []
+        local rows, vals = rowvals(A), nonzeros(A)
+        for u = 1:n
+          for k in nzrange(A, u)
+            local v = rows[k]
+            local w = vals[k]
+            if u != v && !iszero(w)
+              push!(us, u)
+              push!(vs, v)
+            end
+          end
+        end
+        @show size(hcat(us, vs))
+        local G = Dimacs.FromEdgeList(n, hcat(us, vs))
+        # try to match the lemon dataset
+        local caps::Vector{Int}, costs::Vector{Int} = rand(UInt32, G.m), rand(UInt32, G.m)
+        caps = (caps .% 1000) .+ 1
+        costs = (costs .% 10000) .+ 1
+        local demands::Vector{Int} = zeros(Int, n)
+        local netD = G.n * 10 # keep the demand low for now
+        local demAssignments = (rand(UInt32, netD, 2) .% G.n) .+ 1
+        for (u, v) in eachrow(demAssignments)
+          if u != v
+            demands[u] -= 1
+            demands[v] += 1
+          end
+        end
+        local netw = Dimacs.McfpNet(G = G, Cost = costs, Cap = caps, Demand = demands)
       else
         probpath = actp
       end
@@ -109,11 +143,6 @@ function main()
 
     @assert !isnothing(probpath)
     @assert probname in out[:, :name]
-    local netw = Dimacs.ReadDimacs(probpath)
-    out[out.name.==probname, :input_file] .= probpath
-    out[out.name.==probname, :bytes] .= lstat(probpath).size
-    out[out.name.==probname, :vertices] .= netw.G.n
-    out[out.name.==probname, :arcs] .= netw.G.m
   end
 
   if !isnothing(specfile)
