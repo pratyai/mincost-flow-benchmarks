@@ -5,6 +5,7 @@ using ArgParse
 using CSV
 using DataFrames
 using CairoMakie
+using Statistics
 using ColorSchemes
 
 function parse_cmdargs()
@@ -71,6 +72,16 @@ function main()
         color = Cycled(i),
         strokecolor = :red,
         strokewidth = 0.8,
+      )
+      local meangood = groupby(good, :arcs)
+      meangood = combine(meangood, metric => mean => metric)
+      local ln1 = lines!(
+        ax,
+        meangood[:, :arcs],
+        meangood[:, metric],
+        color = Cycled(i),
+        linestyle = :dash,
+        linewidth = 1,
       )
       push!(legentries, (name, [sc1]))
     end
