@@ -1,0 +1,15 @@
+name,input_file,bytes,vertices,arcs
+MaxPlanck/shallow_water1,/tmp/data/MaxPlanck/shallow_water1.min.gz,2228865,81920,245760
+MaxPlanck/shallow_water2,/tmp/data/MaxPlanck/shallow_water2.min.gz,2229869,81920,245760
+GHS_psdef/jnlbrng1,/tmp/data/GHS_psdef/jnlbrng1.min.gz,1423669,40000,159200
+GHS_psdef/apache1,/tmp/data/GHS_psdef/apache1.min.gz,4097230,80800,461384
+HB/gr_30_30,/tmp/data/HB/gr_30_30.min.gz,52708,900,6844
+Norris/fv1,/tmp/data/Norris/fv1.min.gz,583616,9604,75660
+Norris/fv2,/tmp/data/Norris/fv2.min.gz,602376,9801,77224
+Norris/fv3,/tmp/data/Norris/fv3.min.gz,602950,9801,77224
+Gaertner/nopoly,/tmp/data/Gaertner/nopoly.min.gz,509183,10774,60068
+Andrews/Andrews,/tmp/data/Andrews/Andrews.min.gz,6447901,60000,700154
+HB/nos6,/tmp/data/HB/nos6.min.gz,21710,675,2580
+HB/nos7,/tmp/data/HB/nos7.min.gz,31722,729,3888
+McRae/ecology1,/tmp/data/McRae/ecology1.min.gz,36140579,1000000,3996000
+McRae/ecology2,/tmp/data/McRae/ecology2.min.gz,36140403,999999,3995992
