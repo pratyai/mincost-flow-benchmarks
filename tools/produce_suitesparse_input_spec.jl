@@ -114,7 +114,6 @@ function main()
             end
           end
         end
-        @show size(hcat(us, vs))
         local G = Dimacs.FromEdgeList(n, hcat(us, vs))
         # try to match the lemon dataset
         local caps::Vector{Int}, costs::Vector{Int} = rand(UInt32, G.m), rand(UInt32, G.m)
@@ -144,8 +143,6 @@ function main()
       end
     end
 
-    @assert !isnothing(probpath)
-    @assert probname in out[:, :name]
     @assert !isnothing(probpath)
     @assert probname in out[:, :name]
     local netw = Dimacs.ReadDimacs(probpath)
