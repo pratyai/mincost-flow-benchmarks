@@ -1,12 +1,15 @@
 using FromFile
-@from "Dimacs.jl" import Dimacs
 
 using ArgParse
 using CSV
 using DataFrames
 using CairoMakie
-using Statistics
 using ColorSchemes
+using AlgebraOfGraphics
+using Statistics
+using DataFramesMeta
+using DataStructures
+using Statistics
 
 function parse_cmdargs()
   s = ArgParseSettings()

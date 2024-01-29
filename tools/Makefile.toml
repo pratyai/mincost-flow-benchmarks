@@ -15,13 +15,13 @@ args = ["--project=.", "produce_suitesparse_input_spec.jl", "${@}"]
 
 [tasks.orange]
 command = "julia"
-args = ["--project=.", "produce_comparisons.jl", "${@}"]
+args = ["--project=.", "produce_lineplots.jl", "${@}"]
 
 [tasks.orange-netgen_8_40]
 command = "julia"
 args = [
   "--project=.",
-  "produce_comparisons.jl",
+  "produce_lineplots.jl",
   "-i",
   "../netgen_8_40.inspec",
   "-o",
@@ -38,7 +38,7 @@ args = [
 command = "julia"
 args = [
   "--project=.",
-  "produce_comparisons.jl",
+  "produce_lineplots.jl",
   "-i",
   "../netgen_sr_40.inspec",
   "-o",
@@ -55,7 +55,7 @@ args = [
 command = "julia"
 args = [
   "--project=.",
-  "produce_comparisons.jl",
+  "produce_lineplots.jl",
   "-i",
   "../netgen_deg_40.inspec",
   "-o",
@@ -66,4 +66,21 @@ args = [
   "tulip_approxchol=../tulip_approxchol/netgen_deg_40.outspec",
   "tulip_hypre=../tulip_hypre/netgen_deg_40.outspec",
   "tulip_cmg=../tulip_cmg/netgen_deg_40.outspec",
+]
+
+[tasks.orange-suitesparse]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_barplots.jl",
+  "-i",
+  "../suitesparse.inspec",
+  "-o",
+  "../artefacts",
+  # "basic_tulip=../basic_tulip/suitesparse.outspec",
+  # "basic_ipopt=../basic_ipopt/suitesparse.outspec",
+  # "tulip_amg=../tulip_amg/suitesparse.outspec",
+  "tulip_approxchol=../tulip_approxchol/suitesparse.outspec",
+  "tulip_hypre=../tulip_hypre/suitesparse.outspec",
+  "tulip_cmg=../tulip_cmg/suitesparse.outspec",
 ]
