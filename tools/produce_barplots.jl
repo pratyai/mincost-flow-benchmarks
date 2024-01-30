@@ -36,8 +36,6 @@ function main()
 
   set_aog_theme!()
   CairoMakie.activate!(type = "svg"; px_per_unit = 10.0)
-  # local color_theme = Theme(palette = (color = ColorSchemes.tol_medcontrast,))
-  # update_theme!(color_theme)
   local fontsize_theme = Theme(fontsize = 6)
   update_theme!(fontsize_theme)
 
@@ -50,18 +48,24 @@ function main()
     name => insertcols!(CSV.read(ospec, DataFrame), :solver => name) for
     (name, ospec) in probs
   )
-
   local allospecs = leftjoin(vcat(values(ospecs)...), spec; on = :name)
-  @transform!(allospecs, :time_s_per_arc_iter = :time_s ./ (:arcs .* :iters))
+  @transform! allospecs begin
+    :time_s_per_arc_iter = :time_s ./ (:arcs .* :iters)
+    :ok_run = [st in ["Trm_Optimal", "LOCALLY_SOLVED"] for st in :status]
+  end
+
   local f = Figure()
   local bar =
     data(allospecs) *
-    mapping(
-      :name,
-      [:time_s_per_arc_iter, :iters];
-      color = :solver,
-      dodge = :solver,
-      row = dims(1),
+    (
+      mapping(
+        :name,
+        :time_s_per_arc_iter;
+        color = :solver,
+        dodge = :solver,
+        row = :arcs => (t -> "1"),
+      ) +
+      mapping(:name, :iters; color = :solver, dodge = :solver, row = :arcs => (t -> "2"))
     ) *
     visual(BarPlot)
   local plt = draw!(

@@ -35,66 +35,87 @@ function main()
   local args = parse_cmdargs()
   @show args
 
+  set_aog_theme!()
   CairoMakie.activate!(; px_per_unit = 10.0)
   local fontsize_theme = Theme(fontsize = 10)
   update_theme!(fontsize_theme)
-  # local color_theme = Theme(palette = (color = ColorSchemes.tol_medcontrast,))
-  # update_theme!(color_theme)
 
   local probs = [[strip(x) for x in split(f, "=")] for f in args["outspecs"]]
   local inspec = strip(args["i"])
   local outdir = strip(args["o"])
 
   local spec = CSV.read(inspec, DataFrame)
-  local ospecs = Dict(name => CSV.read(ospec, DataFrame) for (name, ospec) in probs)
-
-  local f = Figure()
-  for (axid, metric) in enumerate([:time_s, :iters])
-    local ax = Axis(f[axid, 1], xlabel = "#arcs", ylabel = string(metric))
-    local legentries = []
-    for (i, (name, ospec)) in enumerate(ospecs)
-      local succ = st -> st in ["Trm_Optimal", "LOCALLY_SOLVED"]
-      local notsucc = st -> !succ(st)
-      local good = innerjoin(spec, ospec[succ.(ospec.status), [:name, metric]], on = :name)
-      local bad =
-        innerjoin(spec, ospec[notsucc.(ospec.status), [:name, metric]], on = :name)
-      local sc1 = scatter!(
-        ax,
-        good[:, :arcs],
-        good[:, metric],
-        marker = :circle,
-        markersize = 5,
-        color = Cycled(i),
-      )
-      local sc2 = scatter!(
-        ax,
-        bad[:, :arcs],
-        bad[:, metric],
-        marker = :xcross,
-        markersize = 5,
-        color = Cycled(i),
-        strokecolor = :red,
-        strokewidth = 0.8,
-      )
-      local meangood = groupby(good, :arcs)
-      meangood = combine(meangood, metric => mean => metric)
-      local ln1 = lines!(
-        ax,
-        meangood[:, :arcs],
-        meangood[:, metric],
-        color = Cycled(i),
-        linestyle = :dash,
-        linewidth = 1,
-      )
-      push!(legentries, (name, [sc1]))
-    end
-    f[axid, 2] = Legend(
-      f,
-      [en[2] for en in legentries],
-      [en[1] for en in legentries],
-      framevisible = false,
-    )
+  local ospecs = Dict(
+    name => insertcols!(CSV.read(ospec, DataFrame), :solver => name) for
+    (name, ospec) in probs
+  )
+  local allospecs = leftjoin(vcat(values(ospecs)...), spec; on = :name)
+  @transform! allospecs begin
+    :time_s_per_arc_iter = :time_s ./ (:arcs .* :iters)
+    :ok_run = [st in ["Trm_Optimal", "LOCALLY_SOLVED"] for st in :status]
   end
+  local allerrors = @by allospecs [:solver, :arcs] begin
+    :time_s_mean = mean(:time_s)
+    :time_s_per_arc_iter_mean = mean(:time_s_per_arc_iter)
+    :iters_mean = mean(:iters)
+    :time_s_std = std(:time_s)
+    :time_s_per_arc_iter_std = std(:time_s_per_arc_iter)
+    :iters_std = std(:iters)
+  end
+
+  local f = Figure(size = (600, 600))
+  local pl =
+    (
+      data(allerrors) *
+      (
+        mapping(
+          :arcs,
+          :time_s_mean => "time_s",
+          :time_s_std;
+          color = :solver,
+          dodge = :solver,
+          row = :arcs => (t -> "1"),
+        ) +
+        mapping(
+          :arcs,
+          :time_s_per_arc_iter_mean => "time_s_per_arc_iter",
+          :time_s_per_arc_iter_std;
+          color = :solver,
+          dodge = :solver,
+          row = :arcs => (t -> "2"),
+        ) +
+        mapping(
+          :arcs,
+          :iters_mean => "iters",
+          :iters_std;
+          color = :solver,
+          dodge = :solver,
+          row = :arcs => (t -> "3"),
+        )
+      ) *
+      (visual(Lines; linewidth = 1)) #=visual(Errorbars) + =#
+    ) + (
+      data(allospecs) *
+      (
+        mapping(:arcs, :time_s => "time_s"; color = :solver, row = :arcs => (t -> "1")) +
+        mapping(
+          :arcs,
+          :time_s_per_arc_iter => "time_s_per_arc_iter";
+          color = :solver,
+          row = :arcs => (t -> "2"),
+        ) +
+        mapping(:arcs, :iters => "iters"; color = :solver, row = :arcs => (t -> "3"))
+      ) *
+      visual(Scatter, markersize = 2)
+    )
+  local plt = draw!(f, pl)
+  legend!(
+    f[end+1, :],
+    plt,
+    orientation = :horizontal,
+    titleposition = :left,
+    patchsize = (10, 10),
+  )
   mkpath(outdir)
   save(joinpath(outdir, split(basename(inspec), ".")[1] * ".svg"), f)
   display(f)
