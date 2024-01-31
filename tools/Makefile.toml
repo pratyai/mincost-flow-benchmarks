@@ -34,21 +34,21 @@ args = [
   "tulip_cmg=../tulip_cmg/netgen_8_40.outspec",
 ]
 
-[tasks.orange-netgen_sr_40]
+[tasks.orange-netgen_sr_30]
 command = "julia"
 args = [
   "--project=.",
   "produce_lineplots.jl",
   "-i",
-  "../netgen_sr_40.inspec",
+  "../netgen_sr_30.inspec",
   "-o",
   "../artefacts",
-  # "basic_tulip=../basic_tulip/netgen_sr_40.outspec",
-  # "basic_ipopt=../basic_ipopt/netgen_sr_40.outspec",
-  # "tulip_amg=../tulip_amg/netgen_sr_40.outspec",
-  "tulip_approxchol=../tulip_approxchol/netgen_sr_40.outspec",
-  "tulip_hypre=../tulip_hypre/netgen_sr_40.outspec",
-  "tulip_cmg=../tulip_cmg/netgen_sr_40.outspec",
+  # "basic_tulip=../basic_tulip/netgen_sr_30.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_sr_30.outspec",
+  # "tulip_amg=../tulip_amg/netgen_sr_30.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_sr_30.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_sr_30.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_sr_30.outspec",
 ]
 
 [tasks.orange-netgen_deg_40]
@@ -66,6 +66,57 @@ args = [
   "tulip_approxchol=../tulip_approxchol/netgen_deg_40.outspec",
   "tulip_hypre=../tulip_hypre/netgen_deg_40.outspec",
   "tulip_cmg=../tulip_cmg/netgen_deg_40.outspec",
+]
+
+[tasks.orange-netgen_8_big]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_lineplots.jl",
+  "-i",
+  "../netgen_8_big.inspec",
+  "-o",
+  "../artefacts",
+  # "basic_tulip=../basic_tulip/netgen_8_big.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_8_big.outspec",
+  # "tulip_amg=../tulip_amg/netgen_8_big.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_8_big.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_8_big.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_8_big.outspec",
+]
+
+[tasks.orange-netgen_sr_big]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_lineplots.jl",
+  "-i",
+  "../netgen_sr_big.inspec",
+  "-o",
+  "../artefacts",
+  # "basic_tulip=../basic_tulip/netgen_sr_big.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_sr_big.outspec",
+  # "tulip_amg=../tulip_amg/netgen_sr_big.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_sr_big.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_sr_big.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_sr_big.outspec",
+]
+
+[tasks.orange-netgen_deg_big]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_lineplots.jl",
+  "-i",
+  "../netgen_deg_big.inspec",
+  "-o",
+  "../artefacts",
+  # "basic_tulip=../basic_tulip/netgen_deg_big.outspec",
+  # "basic_ipopt=../basic_ipopt/netgen_deg_big.outspec",
+  # "tulip_amg=../tulip_amg/netgen_deg_big.outspec",
+  "tulip_approxchol=../tulip_approxchol/netgen_deg_big.outspec",
+  "tulip_hypre=../tulip_hypre/netgen_deg_big.outspec",
+  "tulip_cmg=../tulip_cmg/netgen_deg_big.outspec",
 ]
 
 [tasks.orange-suitesparse]
