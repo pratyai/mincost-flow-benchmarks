@@ -119,7 +119,8 @@ function main()
         :time_s => seconds,
         :iters => iters,
         :solution_file => sol_file,
-      ),
+      );
+      promote = true
     )
     if !isnothing(output_spec)
       mkpath(dirname(output_spec))
