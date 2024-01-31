@@ -1,0 +1,6 @@
+name,status,time_s,iters,solution_file
+netgen_sr_14c,Trm_Optimal,4769.1424346290005,64,
+netgen_sr_14d,Trm_Optimal,4308.43115028,51,
+netgen_sr_14a,Trm_Optimal,3682.743439484,53,
+netgen_sr_14b,Trm_Optimal,7034.573014749,75,
+netgen_sr_14e,Trm_Optimal,7992.233094945001,85,
