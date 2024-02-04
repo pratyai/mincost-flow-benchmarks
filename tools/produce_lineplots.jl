@@ -22,6 +22,7 @@ function parse_cmdargs()
     help = "the input spec (entries in the output spec outside the input spec will be ignored)"
     arg_type = String
     required = true
+    action = :append_arg
     "outspecs"
     help = "list of <name>=<outspec path>"
     arg_type = String
@@ -41,14 +42,19 @@ function main()
   update_theme!(fontsize_theme)
 
   local probs = [[strip(x) for x in split(f, "=")] for f in args["outspecs"]]
-  local inspec = strip(args["i"])
+  local inspecs = [strip(x) for x in args["i"]]
   local outdir = strip(args["o"])
 
-  local spec = CSV.read(inspec, DataFrame)
-  local ospecs = Dict(
-    name => insertcols!(CSV.read(ospec, DataFrame), :solver => name) for
-    (name, ospec) in probs
-  )
+  local spec = reduce(vcat, [CSV.read(sp, DataFrame) for sp in inspecs])
+  local ospecs = Dict{String,DataFrame}()
+  for (name, ospec) in probs
+    local t = insertcols!(CSV.read(ospec, DataFrame), :solver => name)
+    if name in keys(ospecs)
+      ospecs[name] = vcat(ospecs[name], t)
+    else
+      ospecs[name] = t
+    end
+  end
   local allospecs = leftjoin(vcat(values(ospecs)...), spec; on = :name)
   @transform! allospecs begin
     :time_s_per_arc_iter = :time_s ./ (:arcs .* :iters)
@@ -71,7 +77,6 @@ function main()
         mapping(
           :arcs,
           :time_s_mean => "time_s",
-          :time_s_std;
           color = :solver,
           dodge = :solver,
           row = :arcs => (t -> "1"),
@@ -79,7 +84,6 @@ function main()
         mapping(
           :arcs,
           :time_s_per_arc_iter_mean => "time_s_per_arc_iter",
-          :time_s_per_arc_iter_std;
           color = :solver,
           dodge = :solver,
           row = :arcs => (t -> "2"),
@@ -87,13 +91,12 @@ function main()
         mapping(
           :arcs,
           :iters_mean => "iters",
-          :iters_std;
           color = :solver,
           dodge = :solver,
           row = :arcs => (t -> "3"),
         )
       ) *
-      (visual(Lines; linewidth = 1)) #=visual(Errorbars) + =#
+      visual(Lines; linewidth = 1)
     ) + (
       data(allospecs) *
       (
@@ -117,7 +120,26 @@ function main()
     patchsize = (10, 10),
   )
   mkpath(outdir)
-  save(joinpath(outdir, split(basename(inspec), ".")[1] * ".svg"), f)
+  local figname = [split(basename(sp), ".")[1] for sp in inspecs]
+  if length(figname) == 1
+    figname = figname[1]
+  else
+    lcp = function (xs)
+      local p = ""
+      while true
+        if any(length(p) .>= length.(xs))
+          return p
+        end
+        local at = length(p) + 1
+        if length(unique([x[at] for x in xs])) != 1
+          return p
+        end
+        p *= string(xs[1][at])
+      end
+    end
+    figname = lcp(figname) * "all"
+  end
+  save(joinpath(outdir, figname * ".svg"), f)
   display(f)
 end
 main()
