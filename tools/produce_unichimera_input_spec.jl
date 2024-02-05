@@ -61,10 +61,11 @@ function main()
   end
   for p in probs
     # clear/insert the rows which are explicitly requested for
-    if p in out[:, :name]
-      out[out.name.==p, :input_file] .= missing
+    local actp = chopsuffix(p, ".mm")
+    if actp in out[:, :name]
+      out[out.name.==actp, :input_file] .= missing
     else
-      push!(out, Dict(:name => chopsuffix(p, ".mm")); cols = :subset)
+      push!(out, Dict(:name => actp); cols = :subset)
     end
   end
   @assert nrow(out) > 0
@@ -139,6 +140,7 @@ function main()
 
     @assert !isnothing(probpath)
     @assert probname in out[:, :name]
+    println("processing ", probname, " : ", probpath)
     local netw = Dimacs.ReadDimacs(probpath)
     out[out.name.==probname, :input_file] .= probpath
     out[out.name.==probname, :bytes] .= lstat(probpath).size
