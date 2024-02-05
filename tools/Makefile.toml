@@ -214,3 +214,20 @@ args = [
   "tulip_hypre=../tulip_hypre/suitesparse.outspec",
   "tulip_cmg=../tulip_cmg/suitesparse.outspec",
 ]
+
+[tasks.orange-unichimera]
+command = "julia"
+args = [
+  "--project=.",
+  "produce_barplots.jl",
+  "-i",
+  "../unichimera.inspec",
+  "-o",
+  "../artefacts",
+  # "basic_tulip=../basic_tulip/unichimera.outspec",
+  # "basic_ipopt=../basic_ipopt/unichimera.outspec",
+  # "tulip_amg=../tulip_amg/unichimera.outspec",
+  "tulip_approxchol=../tulip_approxchol/unichimera.outspec",
+  "tulip_hypre=../tulip_hypre/unichimera.outspec",
+  "tulip_cmg=../tulip_cmg/unichimera.outspec",
+]
