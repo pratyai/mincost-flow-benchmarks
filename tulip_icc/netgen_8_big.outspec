@@ -1,0 +1,8 @@
+name,status,time_s,iters,solution_file
+netgen_8_16b,Trm_IterationLimit,4654.59126997,100,
+netgen_8_16e,Trm_IterationLimit,4575.464075807,100,
+netgen_8_16c,Trm_IterationLimit,4498.748373909,100,
+netgen_8_16d,Trm_IterationLimit,4448.388330422,100,
+netgen_8_16a,Trm_IterationLimit,4654.375775586001,100,
+netgen_8_17d,Trm_IterationLimit,13290.462138743002,100,
+netgen_8_17c,Trm_IterationLimit,14230.979002677,100,
