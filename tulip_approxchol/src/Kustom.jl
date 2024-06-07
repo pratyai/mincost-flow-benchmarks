@@ -17,7 +17,7 @@ using Laplacians: ApproxCholParams, approxchol_sddm
 
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   params::ApproxCholParams = ApproxCholParams(:deg, 0, 2, 2)
-  pcgtol::Tv = sqrt(eps(Tv)) * 4
+  pcgtol::Tv = 1e-11
 end
 
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
