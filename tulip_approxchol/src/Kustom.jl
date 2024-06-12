@@ -17,7 +17,7 @@ using Laplacians: ApproxCholParams, approxchol_sddm
 
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   params::ApproxCholParams = ApproxCholParams(:deg, 0, 2, 2)
-  pcgtol::Tv = 1e-11
+  pcgtol::Tv = 5e-8
 end
 
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
@@ -133,13 +133,14 @@ function Tulip.update_solver_status!(
   ρd = res.rd_nrm / (pt.τ * (one(T) + norm(dat.c, Inf)))
   ρg = abs(hsd.primal_objective - hsd.dual_objective) / (one(T) + abs(hsd.dual_objective))
 
+  #=
   local gap_bound = (
     res.rg +
     0.5 *
     (norm(res.rp_nrm, Inf) + norm(res.rl_nrm, Inf) + norm(res.ru_nrm, Inf)) *
     norm(dat.c, 1) +
     0.5 * norm(res.rd_nrm, Inf) * norm(dat.b, 1)
-  )
+  )=#
   # @show gap_bound, pt.κ, pt.τ
   # @show count(res.rl .< 0), count(res.ru .< 0)
 
@@ -157,9 +158,11 @@ function Tulip.update_solver_status!(
   end
 
   # Check for optimal solution
+  #=
   if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg && (gap_bound < 0 || gap_bound >= pt.τ)
-    @show gap_bound, pt.τ
+    # @show gap_bound, pt.τ
   end
+  =#
   if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg# && gap_bound < pt.τ
     hsd.primal_status = Tulip.Sln_Optimal
     hsd.dual_status = Tulip.Sln_Optimal

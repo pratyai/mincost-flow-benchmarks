@@ -80,6 +80,7 @@ function main()
     fact_s = Float64[],
     solv_s = Float64[],
     iters = Int[],
+    sddm_calls = Int[],
     solution_file = String[],
   )
   if !isnothing(output_spec) && isfile(output_spec)
@@ -108,6 +109,7 @@ function main()
     local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
     local fact_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Factorization"])
     local solv_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
+    local sddm_calls = TimerOutputs.ncalls(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
 
     # Save solution if asked for.
     local sol_file = ""
@@ -126,6 +128,7 @@ function main()
         :fact_s => fact_ns * 1e-9,
         :solv_s => solv_ns * 1e-9,
         :iters => iters,
+        :sddm_calls => sddm_calls,
         :solution_file => sol_file,
       );
       promote = true
