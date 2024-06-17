@@ -15,13 +15,18 @@ using CombinatorialMultigrid
 using SparseArrays: AbstractSparseMatrix
 using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
 
-struct Backend{Tv<:Number} <: AbstractKKTBackend end
+Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
+  pcgtol::Tv = 5e-8
+  # pcgtol::Tv = 1e-11
+end
 
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
   # Problem data
   m::Ti
   n::Ti
   A::AbstractSparseMatrix{Tv,Ti}
+  # Laplacians related
+  pcgtol::Tv  # Parameter to use when constructing the SDDM solver
 
   # Workspace
   θ::Vector{Tv} # Diagonal scaling
@@ -63,10 +68,10 @@ function Tulip.KKT.setup(
   end
   =#
   local prec, h = cmg_preconditioner_lap(K)
-  local pcgf = Laplacians.pcgSolver(K, prec)
+  local pcgf = Laplacians.pcgSolver(K, prec; tol = bk.pcgtol)
   cmg_solve = (b) -> pcgf(b)
 
-  return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, cmg_solve)
+  return Solver{Tv,Ti}(m, n, A, bk.pcgtol, θ, regP, regD, K, ξ, cmg_solve)
 end
 
 function Tulip.KKT.update!(
@@ -97,7 +102,7 @@ function Tulip.KKT.update!(
   local a, dv, de = Laplacians.adjValAndExcess(kkt.K)
   local a = Laplacians.lap(Laplacians.extendMatrix(a, dv, de))
   local prec, h = cmg_preconditioner_lap(a)
-  local pcgf = Laplacians.pcgSolver(a, prec)
+  local pcgf = Laplacians.pcgSolver(a, prec; tol=kkt.pcgtol)
   kkt.cmg_solve = function (b::Vector{Tv})
     local n = length(b)
     local bt = Tv[b; -sum(b)]
@@ -107,7 +112,7 @@ function Tulip.KKT.update!(
   end
   =#
   local prec, h = cmg_preconditioner_lap(kkt.K)
-  local pcgf = Laplacians.pcgSolver(kkt.K, prec)
+  local pcgf = Laplacians.pcgSolver(kkt.K, prec; tol = kkt.pcgtol)
   kkt.cmg_solve = (b) -> pcgf(b)
 
   return nothing
@@ -155,6 +160,7 @@ function Tulip.update_solver_status!(
   ρd = res.rd_nrm / (pt.τ * (one(T) + norm(dat.c, Inf)))
   ρg = abs(hsd.primal_objective - hsd.dual_objective) / (one(T) + abs(hsd.dual_objective))
 
+  #=
   local gap_bound = (
     res.rg +
     0.5 *
@@ -162,6 +168,7 @@ function Tulip.update_solver_status!(
     norm(dat.c, 1) +
     0.5 * norm(res.rd_nrm, Inf) * norm(dat.b, 1)
   )
+  =#
   # @show gap_bound, pt.κ, pt.τ
   # @show count(res.rl .< 0), count(res.ru .< 0)
 
@@ -179,9 +186,11 @@ function Tulip.update_solver_status!(
   end
 
   # Check for optimal solution
+  #=
   if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg && (gap_bound < 0 || gap_bound >= pt.τ)
     @show gap_bound, pt.τ
   end
+  =#
   if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg# && gap_bound < pt.τ
     hsd.primal_status = Tulip.Sln_Optimal
     hsd.dual_status = Tulip.Sln_Optimal

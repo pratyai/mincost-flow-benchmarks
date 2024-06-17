@@ -8,6 +8,8 @@ using StatProfilerHTML
 using CSV
 using DataFrames
 using JLD2
+using MultiFloats
+using TimerOutputs
 
 function parse_cmdargs()
   s = ArgParseSettings()
@@ -76,7 +78,10 @@ function main()
     name = String[],
     status = String[],
     time_s = Float64[],
+    fact_s = Float64[],
+    solv_s = Float64[],
     iters = Int[],
+    sddm_calls = Int[],
     solution_file = String[],
   )
   if !isnothing(output_spec) && isfile(output_spec)
@@ -100,8 +105,13 @@ function main()
 
     local indimacs::String = r[:input_file]
     local netw = Dimacs.ReadDimacs(indimacs)
+
     local lp = Integration.construct_tulip_model(netw, Float64)
     local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
+    local fact_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Factorization"])
+    local solv_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
+    local sddm_calls =
+      TimerOutputs.ncalls(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
 
     # Save solution if asked for.
     local sol_file = ""
@@ -117,14 +127,19 @@ function main()
         :name => r[:name],
         :status => String(Symbol(status)),
         :time_s => seconds,
+        :fact_s => fact_ns * 1e-9,
+        :solv_s => solv_ns * 1e-9,
         :iters => iters,
+        :sddm_calls => sddm_calls,
         :solution_file => sol_file,
       );
-      promote = true
+      promote = true,
     )
     if !isnothing(output_spec)
       mkpath(dirname(output_spec))
       CSV.write(output_spec, out)
+    else
+      @show out
     end
   end
 

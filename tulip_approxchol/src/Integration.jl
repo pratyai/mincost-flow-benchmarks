@@ -41,10 +41,10 @@ function construct_tulip_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Num
   Tulip.set_parameter(lp, "Presolve_Level", 0)  # disable presolve
   Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
   Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}())
-  # Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-4))
-  Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-6))
-  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-8))
-  Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-10))
+  Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-4))
+  # Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-6))
+  Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-8))
+  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-10))
   Tulip.set_parameter(lp, "IPM_IterationsLimit", 200)
 
   return lp
