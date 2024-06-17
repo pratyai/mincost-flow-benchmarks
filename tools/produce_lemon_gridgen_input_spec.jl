@@ -28,7 +28,7 @@ function parse_cmdargs()
   return parse_args(s)
 end
 
-const NETGEN_URL = "http://lime.cs.elte.hu/~kpeter/data/mcf/netgen/"
+const GRIDGEN_URL = "http://lime.cs.elte.hu/~kpeter/data/mcf/gridgen/"
 
 function main()
   local args = parse_cmdargs()
@@ -90,7 +90,7 @@ function main()
       end
       if isnothing(actp)
         # download as a last resort
-        local dfrm = joinpath(NETGEN_URL, probname * ".min.gz")
+        local dfrm = joinpath(GRIDGEN_URL, probname * ".min.gz")
         probpath = joinpath(probdir, probname * ".min.gz")
         println("downloading: ", dfrm, " to ", probpath)
         local tmpat = Downloads.download(dfrm)
