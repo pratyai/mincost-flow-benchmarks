@@ -122,7 +122,7 @@ function main()
           floAssignments .= abs.(rand(Int, G.m)) .% (min.(caps, tops) .+ 1)
           demAssignments .= G.IncidenceMatrix * floAssignments
           att += 1
-          tops = Int(floor(tops/2))
+          tops = Int(floor(tops / 2))
         end
         @show att, tops, maximum(abs.(demAssignments)), maximum(floAssignments)
         demands .= demAssignments
@@ -134,18 +134,18 @@ function main()
         netw.Cap .= 1
         netw.Cost .= 1
         netw.Demand .= 0
-        local degs = sum(netw.G.AdjacencyMatrix; dims=1)
+        local degs = sum(netw.G.AdjacencyMatrix; dims = 1)
         local mdegs = maximum(degs)
         local times = 0
-        for u in 1:netw.G.n
+        for u = 1:netw.G.n
           if degs[u] == 2
             continue
           end
           if degs[u] == mdegs
             if times == 0
-              netw.Demand[u] = mdegs/2
+              netw.Demand[u] = mdegs / 2
             else
-              netw.Demand[u] = -mdegs/2
+              netw.Demand[u] = -mdegs / 2
             end
             times += 1
           end
