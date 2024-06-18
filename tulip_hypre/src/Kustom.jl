@@ -14,13 +14,18 @@ using HYPRE
 using SparseArrays: AbstractSparseMatrix
 using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
 
-struct Backend{Tv<:Number} <: AbstractKKTBackend end
+Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
+  pcgtol::Tv = 5e-8
+  # pcgtol::Tv = 1e-11
+end
 
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
   # Problem data
   m::Ti
   n::Ti
   A::AbstractSparseMatrix{Tv,Ti}
+  # Laplacians related
+  pcgtol::Tv  # Parameter to use when constructing the SDDM solver
 
   # Workspace
   θ::Vector{Tv} # Diagonal scaling
@@ -50,11 +55,11 @@ function Tulip.KKT.setup(
 
   local hypre_solve = function (b)
     local precond = HYPRE.BoomerAMG()
-    local bicg = HYPRE.BiCGSTAB(; Precond = precond)
+    local bicg = HYPRE.BiCGSTAB(; Precond = precond, Tol = bk.pcgtol)
     return HYPRE.solve(bicg, K, b)
   end
 
-  return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, hypre_solve)
+  return Solver{Tv,Ti}(m, n, A, bk.pcgtol, θ, regP, regD, K, ξ, hypre_solve)
 end
 
 function Tulip.KKT.update!(
@@ -83,7 +88,7 @@ function Tulip.KKT.update!(
 
   kkt.hypre_solve = function (b)
     local precond = HYPRE.BoomerAMG()
-    local bicg = HYPRE.BiCGSTAB(; Precond = precond)
+    local bicg = HYPRE.BiCGSTAB(; Precond = precond, Tol = kkt.pcgtol)
     return HYPRE.solve(bicg, kkt.K, b)
   end
 
@@ -132,6 +137,7 @@ function Tulip.update_solver_status!(
   ρd = res.rd_nrm / (pt.τ * (one(T) + norm(dat.c, Inf)))
   ρg = abs(hsd.primal_objective - hsd.dual_objective) / (one(T) + abs(hsd.dual_objective))
 
+  #=
   local gap_bound = (
     res.rg +
     0.5 *
@@ -139,6 +145,7 @@ function Tulip.update_solver_status!(
     norm(dat.c, 1) +
     0.5 * norm(res.rd_nrm, Inf) * norm(dat.b, 1)
   )
+  =#
   # @show gap_bound, pt.κ, pt.τ
   # @show count(res.rl .< 0), count(res.ru .< 0)
 
@@ -156,9 +163,11 @@ function Tulip.update_solver_status!(
   end
 
   # Check for optimal solution
+  #=
   if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg && (gap_bound < 0 || gap_bound >= pt.τ)
     @show gap_bound, pt.τ
   end
+  =#
   if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg# && gap_bound < pt.τ
     hsd.primal_status = Tulip.Sln_Optimal
     hsd.dual_status = Tulip.Sln_Optimal
