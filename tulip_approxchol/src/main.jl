@@ -109,7 +109,8 @@ function main()
     local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
     local fact_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Factorization"])
     local solv_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
-    local sddm_calls = TimerOutputs.ncalls(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
+    local sddm_calls =
+      TimerOutputs.ncalls(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
 
     # Save solution if asked for.
     local sol_file = ""
@@ -131,7 +132,7 @@ function main()
         :sddm_calls => sddm_calls,
         :solution_file => sol_file,
       );
-      promote = true
+      promote = true,
     )
     if !isnothing(output_spec)
       mkpath(dirname(output_spec))

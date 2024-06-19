@@ -104,7 +104,7 @@ function Tulip.KKT.solve!(
   mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
 
   # Solve normal equations
-  dy .= kkt.sddm_solve(kkt.ξ)
+  dy .= kkt.sddm_solve(kkt.ξ; maxits = 100)
 
   # Recover dx
   copyto!(dx, ξd)
