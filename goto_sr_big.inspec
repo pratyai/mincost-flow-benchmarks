@@ -1,0 +1,16 @@
+name,input_file,bytes,vertices,arcs
+goto_sr_14a,/tmp/data/goto_sr_14a.min.gz,13023974,16384,2097152
+goto_sr_14b,/tmp/data/goto_sr_14b.min.gz,13023112,16384,2097152
+goto_sr_14c,/tmp/data/goto_sr_14c.min.gz,13023510,16384,2097152
+goto_sr_14d,/tmp/data/goto_sr_14d.min.gz,13023507,16384,2097152
+goto_sr_14e,/tmp/data/goto_sr_14e.min.gz,13024446,16384,2097152
+goto_sr_15a,/tmp/data/goto_sr_15a.min.gz,36848946,32768,5931642
+goto_sr_15b,/tmp/data/goto_sr_15b.min.gz,36850242,32768,5931642
+goto_sr_15c,/tmp/data/goto_sr_15c.min.gz,36849924,32768,5931642
+goto_sr_15d,/tmp/data/goto_sr_15d.min.gz,36853270,32768,5931642
+goto_sr_15e,/tmp/data/goto_sr_15e.min.gz,36847527,32768,5931642
+goto_sr_16a,/tmp/data/goto_sr_16a.min.gz,105044219,65536,16777216
+goto_sr_16b,/tmp/data/goto_sr_16b.min.gz,105047960,65536,16777216
+goto_sr_16c,/tmp/data/goto_sr_16c.min.gz,105047129,65536,16777216
+goto_sr_16d,/tmp/data/goto_sr_16d.min.gz,105049413,65536,16777216
+goto_sr_16e,/tmp/data/goto_sr_16e.min.gz,105043697,65536,16777216
