@@ -6,5 +6,7 @@
     min(fact_s_per_arc_per_iter), max(fact_s_per_arc_per_iter)
     from giant
     where iters < 200
+    and solver in ('tulip_approxchol', 'tulip_cmg', 'tulip_hypre')
+    and labels is not null
     group by labels, solver"
   ../giant.csv | csvlens)
