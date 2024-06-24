@@ -22,11 +22,11 @@ df = (
 )
 odf = df
 
-PROBCLASS = "goto_sr"
+PROBCLASS = "netgen_8"
 AXIS = "arcs"
 METRIC = "time_s"
 ARCS_MIN, ARCS_MAX = 1e0, 5e50
-REG_ARCS_MIN = 1e3
+REG_ARCS_MIN, REG_ARCS_MAX = 1e3, 5e50
 
 
 t = df.filter(pl.col("labels") == PROBCLASS)[:, AXIS]
@@ -40,15 +40,16 @@ df = (
 
 
 def curve(x, c, a):
-    return c * (x**a)
+    return c * (x ** a)
 
 
 df_reg = {}
-for solver in df[:, "solver"].unique():
+for solver in sorted(df[:, "solver"].unique()):
     t = (
         odf.filter(pl.col("solver") == solver)
         .filter(pl.col("labels") == PROBCLASS)
         .filter(pl.col(AXIS) >= REG_ARCS_MIN)
+        .filter(pl.col(AXIS) < REG_ARCS_MAX)
         .drop_nulls(METRIC)
     )
     popt, pcov = curve_fit(
@@ -82,10 +83,17 @@ p = df.hvplot.scatter(
     width=400,
     legend="top_left",
     yticks=10,
+    xticks=10,
+    ylim=(
+        -df[:, METRIC].max() * 0.1,
+        df[:, METRIC].max() * 1.1,
+    ),
+    rot=45,
+    xformatter="%.1e",
 )
 
 x = np.linspace(df[:, AXIS].min(), df[:, AXIS].max(), num=100)
-for solver in df[:, "solver"].unique():
+for solver in sorted(df[:, "solver"].unique()):
     y = curve(x, *df_reg[solver])
     xy = pl.DataFrame({AXIS: x, "y": y})
     p = p * xy.hvplot.line(
@@ -94,6 +102,7 @@ for solver in df[:, "solver"].unique():
         line_width=1,
         color=all_colours[solver],
         yticks=10,
+        xticks=10,
     )
 
 hvplot.show(p)

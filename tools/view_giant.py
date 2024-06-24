@@ -34,10 +34,10 @@ for t in reltabs:
 reltabs = []
 for vc in valcols:
     t = reldf.group_by(["labels", "solver"]).agg(
-        pl.col(vc).min().alias("min " + vc),
-        pl.col(vc).max().alias("max " + vc),
-        # pl.col(vc).median().alias('median ' + vc),
-        # pl.col(vc).mean().alias('mean ' + vc),
+        pl.col(vc).min().round(2).alias("min " + vc[:5]),
+        pl.col(vc).max().round(2).alias("max " + vc[:5]),
+        # pl.col(vc).median().round(2).alias('median ' + vc[:5]),
+        # pl.col(vc).mean().round(2).alias('mean ' + vc[:5]),
     )
     reltabs.append(t)
 

@@ -68,6 +68,8 @@ function main()
     :sddm_calls_per_iter = :sddm_calls ./ :iters
     :solv_s_per_arc_per_sddm_call = :solv_s ./ (:arcs .* :sddm_calls)
   end
+  sort!(t, [:solver, :name])
+  select!(t, :solver, :name, Not([:solver, :name]))
 
   CSV.write(stdout, t)
 end
