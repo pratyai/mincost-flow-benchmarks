@@ -56,6 +56,11 @@ function construct_tulip_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Num
 
   Tulip.set_parameter(lp, "IPM_IterationsLimit", 200)
 
+  se = Tv(sqrt(eps(Float64)))
+  Tulip.set_parameter(lp, "IPM_TolerancePFeas", se)
+  Tulip.set_parameter(lp, "IPM_ToleranceDFeas", se)
+  Tulip.set_parameter(lp, "IPM_ToleranceRGap", se)
+  Tulip.set_parameter(lp, "IPM_ToleranceIFeas", se)
   return lp
 end
 
