@@ -3,3 +3,6 @@
 
 Manifest.toml
 **/Manifest.toml
+
+.Rapp.history
+**/.Rapp.history
