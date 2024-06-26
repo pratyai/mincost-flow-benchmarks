@@ -1,7 +1,0 @@
-name,status,time_s,iters,solution_file
-vision_inv_01_bone_subxyz_subxy_n6c100_a,Trm_IterationLimit,675.2144857750001,100,
-vision_inv_01_bone_subxyz_subxy_n6c100_b,Trm_IterationLimit,682.732804493,100,
-vision_inv_01_bone_subxyz_subxy_n6c100_c,Trm_IterationLimit,688.208985735,100,
-vision_inv_01_bone_subxyz_subxy_n6c100_d,Trm_IterationLimit,661.7665300580001,100,
-vision_inv_01_bone_subxyz_subxy_n6c100_e,Trm_IterationLimit,650.545723627,100,
-vision_inv_02_bone_subxyz_subx_n6c100_a,Trm_IterationLimit,2548.5521795140003,100,
