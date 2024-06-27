@@ -12,7 +12,7 @@ using GZip
   m::Int
   EdgeList::Matrix{Int}
   IncidenceMatrix::SparseMatrixCSC{Int8,Int}
-  AdjacencyMatrix::SparseMatrixCSC{Int8,Int}
+  AdjacencyMatrix::SparseMatrixCSC{Int,Int}
 end
 
 @kwdef struct McfpNet{Tv<:Number}
@@ -25,12 +25,14 @@ end
 function FromEdgeList(n::Int, E::Matrix{Int})
   local m = size(E, 1)
   @assert size(E) == (m, 2)
+  Inc = MakeIncidenceMatrix(n, E)
+  Adj = MakeAdjacencyMatrix(n, E, ones(m))
   return Graph(
     n = n,
     m = m,
     EdgeList = E,
-    IncidenceMatrix = MakeIncidenceMatrix(n, E),
-    AdjacencyMatrix = MakeAdjacencyMatrix(n, E, ones(m)),
+    IncidenceMatrix = Inc,
+    AdjacencyMatrix = Adj,
   )
 end
 
