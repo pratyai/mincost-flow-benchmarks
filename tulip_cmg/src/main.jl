@@ -108,6 +108,8 @@ function main()
 
     local lp = Integration.construct_tulip_model(netw, Float64)
     local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
+    # lp = Integration.construct_tulip_model(netw, Float64)
+    # lp, status, iters, seconds = Integration.solve_tulip_model(lp)
     local fact_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Factorization"])
     local solv_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
     local sddm_calls =
