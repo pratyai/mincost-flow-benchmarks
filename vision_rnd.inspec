@@ -1,5 +1,5 @@
 name,input_file,bytes,vertices,arcs
-vision_rnd_01_bone_subxyz_subxy_n6c100_a,/tmp/data/vision_rnd_01_bone_subxyz_subxy_n6c100_a.min,33947084,245762,1431453
+vision_rnd_01_bone_subxyz_subxy_n6c100_a,/tmp/data/vision_rnd_01_bone_subxyz_subxy_n6c100_a.min.gz,8269568,245762,1431453
 vision_rnd_01_bone_subxyz_subxy_n6c100_b,/tmp/data/vision_rnd_01_bone_subxyz_subxy_n6c100_b.min.gz,8268931,245762,1431453
 vision_rnd_01_bone_subxyz_subxy_n6c100_c,/tmp/data/vision_rnd_01_bone_subxyz_subxy_n6c100_c.min.gz,8269636,245762,1431453
 vision_rnd_01_bone_subxyz_subxy_n6c100_d,/tmp/data/vision_rnd_01_bone_subxyz_subxy_n6c100_d.min.gz,8269192,245762,1431453
