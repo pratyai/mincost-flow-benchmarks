@@ -174,6 +174,13 @@ function main()
     out[out.name.==probname, :bytes] .= lstat(probpath).size
     out[out.name.==probname, :vertices] .= netw.G.n
     out[out.name.==probname, :arcs] .= netw.G.m
+
+    if !isnothing(specfile)
+      mkpath(dirname(specfile))
+      CSV.write(specfile, out)
+    else
+      @show out
+    end
   end
 
   if !isnothing(specfile)
