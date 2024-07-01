@@ -27,13 +27,13 @@ for vc in valcols:
     )
     reltabs.append(dfpbest)
 
-reldf = df[:, ["name", "solver", "labels"]]
+reldf = df[:, ["name", "solver", "probclass"]]
 for t in reltabs:
     reldf = reldf.join(t, on=["name", "solver"])
 
 reltabs = []
 for vc in valcols:
-    t = reldf.group_by(["labels", "solver"]).agg(
+    t = reldf.group_by(["probclass", "solver"]).agg(
         pl.col(vc).min().round(2).alias("min " + vc[:5]),
         pl.col(vc).max().round(2).alias("max " + vc[:5]),
         # pl.col(vc).median().round(2).alias('median ' + vc[:5]),
@@ -43,8 +43,8 @@ for vc in valcols:
 
 reldf = reltabs[0]
 for t in reltabs[1:]:
-    reldf = reldf.join(t, on=["labels", "solver"])
-reldf = reldf.sort("labels", "solver")
+    reldf = reldf.join(t, on=["probclass", "solver"])
+reldf = reldf.sort("probclass", "solver").filter(pl.col("solver") != "tulip_approxchol")
 pl.Config.set_tbl_rows(100)
 pl.Config.set_tbl_cols(100)
 

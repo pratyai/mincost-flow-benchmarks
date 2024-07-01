@@ -2,38 +2,72 @@ using CSV
 using DataFrames
 using DataFramesMeta
 
-function labels_from_problem_name(name::String)
-  local labels = String[]
-  if startswith(name, "netgen_8_")
-    push!(labels, "netgen_8")
-  elseif startswith(name, "netgen_sr_")
-    push!(labels, "netgen_sr")
-  elseif startswith(name, "netgen_deg_")
-    push!(labels, "netgen_deg")
-  elseif startswith(name, "gridgen_8_")
-    push!(labels, "gridgen_8")
-  elseif startswith(name, "gridgen_sr_")
-    push!(labels, "gridgen_sr")
-  elseif startswith(name, "gridgen_deg_")
-    push!(labels, "gridgen_deg")
-  elseif startswith(name, "goto_8_")
-    push!(labels, "goto_8")
-  elseif startswith(name, "goto_sr_")
-    push!(labels, "goto_sr")
-  elseif startswith(name, "grid_long_")
-    push!(labels, "grid_long")
-  elseif startswith(name, "grid_square_")
-    push!(labels, "grid_square")
-  elseif startswith(name, "grid_wide_")
-    push!(labels, "grid_wide")
-  elseif startswith(name, "spielman")
-    push!(labels, "spielman")
-  elseif startswith(name, "road_path")
-    push!(labels, "road_path")
-  elseif startswith(name, "road_flow")
-    push!(labels, "road_flow")
+function floatbits_from_file_name(name::AbstractString)
+  if occursin("f64", name)
+    return 64
+  elseif occursin("f128", name)
+    return 128
   end
-  return labels
+  return missing
+end
+
+function epcg_from_file_name(name::AbstractString)
+  if occursin("pcg=5e-8", name)
+    return 5e-8
+  elseif occursin("pcg=1e-11", name)
+    return 1e-11
+  elseif occursin("pcg=1e-16", name)
+    return 1e-16
+  end
+  return missing
+end
+
+function rhos_from_file_name(name::AbstractString)
+  if occursin("rhos=1e-4,1e-8", name)
+    return (1e-4, 1e-8)
+  elseif occursin("pcg=1e-6,1e-10", name)
+    return (1e-6, 1e-10)
+  end
+  return missing, missing
+end
+
+function probclass_from_problem_name(name::AbstractString)
+  if startswith(name, "netgen_8_")
+    return "netgen_8"
+  elseif startswith(name, "netgen_sr_")
+    return "netgen_sr"
+  elseif startswith(name, "netgen_deg_")
+    return "netgen_deg"
+  elseif startswith(name, "gridgen_8_")
+    return "gridgen_8"
+  elseif startswith(name, "gridgen_sr_")
+    return "gridgen_sr"
+  elseif startswith(name, "gridgen_deg_")
+    return "gridgen_deg"
+  elseif startswith(name, "goto_8_")
+    return "goto_8"
+  elseif startswith(name, "goto_sr_")
+    return "goto_sr"
+  elseif startswith(name, "grid_long_")
+    return "grid_long"
+  elseif startswith(name, "grid_square_")
+    return "grid_square"
+  elseif startswith(name, "grid_wide_")
+    return "grid_wide"
+  elseif startswith(name, "spielman")
+    return "spielman"
+  elseif startswith(name, "road_path")
+    return "road_path"
+  elseif startswith(name, "road_flow")
+    return "road_flow"
+  elseif startswith(name, "vision_rnd")
+    return "vision_rnd"
+  elseif startswith(name, "vision_prop")
+    return "vision_prop"
+  elseif startswith(name, "vision_inv")
+    return "vision_inv"
+  end
+  return missing
 end
 
 function main()
@@ -47,8 +81,15 @@ function main()
       append!(ins, t; cols = :union)
     else
       local t = CSV.read(l, DataFrame)
+      local fbits = floatbits_from_file_name(l)
+      local epcg = epcg_from_file_name(l)
+      local rhop, rhod = rhos_from_file_name(l)
       @transform! t @astable begin
         :solver = basename(dirname(l))
+        :floatbits = fbits
+        :epcg = epcg
+        :rhop = rhop
+        :rhod = rhod
       end
       append!(outs, t; cols = :union)
     end
@@ -61,7 +102,7 @@ function main()
   t = t[!, Not(:solution_file)]
 
   @transform! t begin
-    :labels = join.(labels_from_problem_name.(:name), ",")
+    :probclass = probclass_from_problem_name.(:name)
     :time_s_per_arc_per_iter = :time_s ./ (:arcs .* :iters)
     :fact_s_per_arc_per_iter = :fact_s ./ (:arcs .* :iters)
     :solv_s_per_arc_per_iter = :solv_s ./ (:arcs .* :iters)
