@@ -1,0 +1,3 @@
+name,status,time_s,fact_s,solv_s,iters,sddm_calls,solution_file
+spielman.k100.low0.25.up1.0e-6.i1,Trm_Optimal,312.130153729,93.007712231,149.865847441,139,722,
+spielman.k200.low0.25.up1.0e-6.i1,Trm_IterationLimit,13015.46862696,4972.935039966001,6500.819221070001,200,1006,
