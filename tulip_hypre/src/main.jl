@@ -11,6 +11,9 @@ using JLD2
 using HYPRE
 using MultiFloats
 using TimerOutputs
+using Statistics
+
+UseFloatType = Float64
 
 function parse_cmdargs()
   s = ArgParseSettings()
@@ -61,7 +64,6 @@ function main()
     solution_dir = strip(solution_dir)
   end
 
-
   if !isnothing(warmup_spec)
     local warmspec = CSV.read(warmup_spec, DataFrame)
     for r in eachrow(warmspec)
@@ -69,7 +71,7 @@ function main()
 
       local indimacs::String = r[:input_file]
       local netw = Dimacs.ReadDimacs(indimacs)
-      local lp = Integration.construct_tulip_model(netw, Float64)
+      local lp = Integration.construct_tulip_model(netw, UseFloatType)
       local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
 
       # Throw away everything because this is just an warmup.
@@ -109,12 +111,26 @@ function main()
     local indimacs::String = r[:input_file]
     local netw = Dimacs.ReadDimacs(indimacs)
 
-    local lp = Integration.construct_tulip_model(netw, Float64)
-    local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
-    local fact_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Factorization"])
-    local solv_ns = TimerOutputs.time(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
-    local sddm_calls =
-      TimerOutputs.ncalls(lp.solver.timer["Main loop"]["Step"]["Newton"]["KKT"])
+    local ntrials = 1
+    if netw.G.m < 1000
+      ntrials = 11
+    elseif netw.G.m < 10000
+      ntrials = 3
+    end
+    local trials = []
+    for ntri = 1:ntrials
+      GC.gc()
+      local lp = Integration.construct_tulip_model(netw, UseFloatType)
+      local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
+      push!(trials, (lp.solver.timer, status, iters, seconds))
+    end
+    local medt = median([t[3] for t in trials])
+    local medidx = findfirst(t -> t[3] == medt, trials)
+    local to, status, iters, seconds = trials[medidx]
+
+    local fact_ns = TimerOutputs.time(to["Main loop"]["Step"]["Factorization"])
+    local solv_ns = TimerOutputs.time(to["Main loop"]["Step"]["Newton"]["KKT"])
+    local sddm_calls = TimerOutputs.ncalls(to["Main loop"]["Step"]["Newton"]["KKT"])
 
     # Save solution if asked for.
     local sol_file = ""
@@ -140,7 +156,7 @@ function main()
     )
     if !isnothing(output_spec)
       mkpath(dirname(output_spec))
-      CSV.write(output_spec, out)
+      CSV.write(output_spec, sort(out, [:name]))
     else
       @show out
     end
@@ -148,7 +164,7 @@ function main()
 
   if !isnothing(output_spec)
     mkpath(dirname(output_spec))
-    CSV.write(output_spec, out)
+    CSV.write(output_spec, sort(out, [:name]))
   else
     @show out
   end

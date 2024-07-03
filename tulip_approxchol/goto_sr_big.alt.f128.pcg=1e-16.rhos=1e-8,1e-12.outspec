@@ -1,2 +1,3 @@
 name,status,time_s,fact_s,solv_s,iters,sddm_calls,solution_file
 goto_sr_14a,Trm_Optimal,7451.199343009001,1055.1198986640002,5009.661546829,117,641,
+goto_sr_14b,Trm_Optimal,6903.272175619,1011.2965429730001,4596.406904281001,111,600,
