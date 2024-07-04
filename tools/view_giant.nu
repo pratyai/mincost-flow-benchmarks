@@ -1,4 +1,4 @@
- (csvsql --query
+ (csvsql -y -1 --query
   "select probclass, solver, count(1) as count,
     cast(min(iters) as int) as min_iters, cast(max(iters) as int) as max_iters,
     round(min(sddm_calls_per_iter), 1) as min_sddm, round(max(sddm_calls_per_iter), 1) as max_sddm,
@@ -8,5 +8,6 @@
     where iters < 200
     and solver in ('tulip_approxchol', 'tulip_cmg', 'tulip_hypre')
     and probclass is not null
+    and baseline is true
     group by probclass, solver"
   ../giant.csv | csvlens)

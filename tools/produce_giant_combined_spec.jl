@@ -1,6 +1,11 @@
 using CSV
 using DataFrames
 using DataFramesMeta
+using Scanf
+
+function baseline_from_file_name(name::AbstractString)
+  return !occursin("alt", name)
+end
 
 function floatbits_from_file_name(name::AbstractString)
   if occursin("f64", name)
@@ -8,25 +13,25 @@ function floatbits_from_file_name(name::AbstractString)
   elseif occursin("f128", name)
     return 128
   end
-  return missing
+  return 64
 end
 
 function epcg_from_file_name(name::AbstractString)
-  if occursin("pcg=5e-8", name)
-    return 5e-8
-  elseif occursin("pcg=1e-11", name)
-    return 1e-11
-  elseif occursin("pcg=1e-16", name)
-    return 1e-16
+  if occursin("pcg=", name)
+    local pos = findfirst("pcg=", name)
+    local r, pcg = @scanf(name[pos.stop+1:end], "%lf", Float64)
+    @assert r == 1
+    return pcg
   end
   return missing
 end
 
 function rhos_from_file_name(name::AbstractString)
-  if occursin("rhos=1e-4,1e-8", name)
-    return (1e-4, 1e-8)
-  elseif occursin("pcg=1e-6,1e-10", name)
-    return (1e-6, 1e-10)
+  if occursin("rhos=", name)
+    local pos = findfirst("rhos=", name)
+    local r, rhop, rhod = @scanf(name[pos.stop+1:end], "%lf,%lf", Float64, Float64)
+    @assert r == 2
+    return rhop, rhod
   end
   return missing, missing
 end
@@ -84,12 +89,14 @@ function main()
       local fbits = floatbits_from_file_name(l)
       local epcg = epcg_from_file_name(l)
       local rhop, rhod = rhos_from_file_name(l)
+      local baseline = baseline_from_file_name(l)
       @transform! t @astable begin
         :solver = basename(dirname(l))
         :floatbits = fbits
         :epcg = epcg
         :rhop = rhop
         :rhod = rhod
+        :baseline = baseline
       end
       append!(outs, t; cols = :union)
     end

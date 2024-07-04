@@ -3,6 +3,7 @@ Compare between different solver setups.
 """
 
 import polars as pl
+import holoviews as hv
 import hvplot
 import hvplot.polars
 from bokeh.models import NumeralTickFormatter, DatetimeTickFormatter
@@ -10,6 +11,8 @@ import numpy as np
 import itertools
 from scipy.optimize import curve_fit
 from scipy.optimize import least_squares
+
+hv.extension("bokeh")
 
 PROBCLASSES = [
     "netgen_8",
@@ -35,7 +38,8 @@ df = (
     pl.read_csv("../giant.csv")
     .filter(pl.col("solver").is_in(solvers))
     .filter(pl.col("probclass").is_in(PROBCLASSES))
-    .filter(pl.col("iters") < 200)
+    .filter(pl.col("baseline"))
+    # .filter(pl.col("iters") < 200)
     .drop_nulls("probclass")
     .with_columns(
         gsize=pl.col("vertices") + pl.col("arcs"),
@@ -79,6 +83,7 @@ for PROBCLASS, solver in itertools.product(PROBCLASSES, solvers):
         .filter(pl.col("probclass") == PROBCLASS)
         .filter(pl.col(AXIS) >= REG_ARCS_MIN)
         .filter(pl.col(AXIS) < REG_ARCS_MAX)
+        .filter(pl.col("iters") < 200)
         .drop_nulls(METRIC)
         .select([AXIS, METRIC])
         .group_by(AXIS)
@@ -100,13 +105,28 @@ for PROBCLASS, solver in itertools.product(PROBCLASSES, solvers):
 
 plotz = []
 for PROBCLASS in PROBCLASSES:
-    all_markers = "^+d"[: len(solvers)]
+    all_markers = [
+        "circle",
+        "diamond",
+        "triangle",
+        "square",
+        "inverted_triangle",
+        "hex",
+    ][: len(solvers)]
     all_markers = dict(zip(solvers, all_markers))
-    all_colours = ["#1f77b4", "#ff7f0e", "#2ca02c"][: len(solvers)]
+    all_colours = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+    ][: len(solvers)]
     all_colours = dict(zip(solvers, all_colours))
 
     tdf = (
         df.filter(pl.col("probclass") == PROBCLASS)
+        .filter(pl.col("iters") < 200)
         .with_columns(
             marker=pl.col("solver").replace(all_markers),
             color=pl.col("solver").replace(all_colours),
@@ -125,22 +145,26 @@ for PROBCLASS in PROBCLASSES:
         by="solver",
         marker="marker",
         color="color",
+        fill_alpha=0.5,
         height=400,
         width=400,
         title=PROBCLASS,
         yticks=10,
-        xticks=10,
+        # xticks=10,
         ylim=ylim,
         rot=45,
         xformatter=NumeralTickFormatter(format="0a"),
         yformatter="%.0fus",
         grid=True,
+        logx=True,
     ).opts(
         legend_position="bottom_right",
         legend_cols=3,
     )
+    p = p * hv.Overlay()
 
-    x = np.linspace(max(tdf[:, AXIS].min(), REG_ARCS_MIN), tdf[:, AXIS].max(), num=100)
+    """
+    x = np.geomspace(max(tdf[:, AXIS].min(), REG_ARCS_MIN), tdf[:, AXIS].max(), num=100)
     for solver in solvers:
         if solver != "tulip_approxchol":
             continue
@@ -154,6 +178,7 @@ for PROBCLASS in PROBCLASSES:
             line_dash="dotted",
             label=solver.removeprefix("tulip_"),
         )
+    """
     plotz.append(p)
 
 p = plotz[0]

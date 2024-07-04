@@ -13,6 +13,7 @@ df = (
     pl.read_csv("../giant.csv")
     .filter(pl.col("solver").is_in(solvers))
     .filter(pl.col("iters") < 200)
+    .filter(pl.col("baseline"))
 )
 
 reltabs = []
