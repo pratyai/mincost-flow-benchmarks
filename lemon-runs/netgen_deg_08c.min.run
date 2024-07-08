@@ -1,0 +1,13 @@
+Problem type: min
+Num of nodes: 4096
+Num of arcs:  1048576
+
+Sum of supply values: 0
+GEQ supply contraints are used for NetworkSimplex
+
+Read the file: u: 0.33s, s: 0.01s, cu: 0s, cs: 0s, real: 0.34885s
+Setup NetworkSimplex class: u: 0.04s, s: 0.01s, cu: 0s, cs: 0s, real: 0.0423071s
+Run NetworkSimplex: u: 0.15s, s: 0s, cu: 0s, cs: 0s, real: 0.153106s
+
+Feasible flow: found
+Min flow cost: 33338480

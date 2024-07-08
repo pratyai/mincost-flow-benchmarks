@@ -1,0 +1,2 @@
+terminate called after throwing an instance of 'lemon::FormatError'
+  what():  lemon:FormatError: Missing problem type declaration.
