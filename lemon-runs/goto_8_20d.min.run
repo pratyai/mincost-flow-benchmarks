@@ -1,0 +1,9 @@
+Problem type: min
+Num of nodes: 1048576
+Num of arcs:  8388608
+
+Sum of supply values: 0
+GEQ supply contraints are used for NetworkSimplex
+
+Read the file: u: 2.99s, s: 0.17s, cu: 0s, cs: 0s, real: 3.17074s
+Setup NetworkSimplex class: u: 0.19s, s: 0.07s, cu: 0s, cs: 0s, real: 0.262239s
