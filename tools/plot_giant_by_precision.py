@@ -15,11 +15,13 @@ from scipy.optimize import least_squares
 hv.extension("bokeh")
 
 PROBCLASSES = [
-    "netgen_8",
+    "road_path",
+    # "netgen_8",
     "grid_long",
     "goto_8",
     # "grid_square",
-    "netgen_sr",
+    "road_flow",
+    # "netgen_sr",
     "grid_wide",
     "goto_sr",
     # "spielman",
@@ -50,6 +52,8 @@ pick_params = {
     "netgen_8": [params[0], params[2]],
     "netgen_sr": [params[0], params[2]],
     "netgen_deg": [params[0], params[2]],
+    "road_path": [params[1], params[2]],
+    "road_flow": [params[0], params[2]],
 }
 label_params = {
     "5e-8,0.0001,1e-8,64": "baseline #1",

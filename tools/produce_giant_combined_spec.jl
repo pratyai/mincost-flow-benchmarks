@@ -101,6 +101,14 @@ function main()
       append!(outs, t; cols = :union)
     end
   end
+  begin
+    local t = CSV.read("../lemon-runs/runs.csv", DataFrame)
+    @transform! t @astable begin
+      :solver = "network_simplex"
+      :baseline = false
+    end
+    append!(outs, t; cols = :union)
+  end
 
   local t = innerjoin(ins, outs, on = :name)
   t = t[!, Not(:input_file)]
