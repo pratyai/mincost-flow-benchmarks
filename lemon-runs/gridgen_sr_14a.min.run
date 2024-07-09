@@ -1,2 +1,13 @@
-terminate called after throwing an instance of 'lemon::FormatError'
-  what():  lemon:FormatError: Missing problem type declaration.
+Problem type: min
+Num of nodes: 16385
+Num of arcs:  2097280
+
+Sum of supply values: 0
+GEQ supply contraints are used for NetworkSimplex
+
+Read the file: u: 0.73s, s: 0.03s, cu: 0s, cs: 0s, real: 0.762683s
+Setup NetworkSimplex class: u: 0.1s, s: 0s, cu: 0s, cs: 0s, real: 0.103972s
+Run NetworkSimplex: u: 0.79s, s: 0s, cu: 0s, cs: 0s, real: 0.796151s
+
+Feasible flow: found
+Min flow cost: 94252051

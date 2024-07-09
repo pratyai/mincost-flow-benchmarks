@@ -7,3 +7,7 @@ GEQ supply contraints are used for NetworkSimplex
 
 Read the file: u: 2.99s, s: 0.17s, cu: 0s, cs: 0s, real: 3.17074s
 Setup NetworkSimplex class: u: 0.19s, s: 0.07s, cu: 0s, cs: 0s, real: 0.262239s
+Run NetworkSimplex: u: 14959.6s, s: 0.18s, cu: 0s, cs: 0s, real: 14961.8s
+
+Feasible flow: found
+Min flow cost: 3503580373677
