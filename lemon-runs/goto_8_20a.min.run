@@ -5,5 +5,9 @@ Num of arcs:  8388608
 Sum of supply values: 0
 GEQ supply contraints are used for NetworkSimplex
 
-Read the file: u: 2.9s, s: 0.15s, cu: 0s, cs: 0s, real: 3.05098s
-Setup NetworkSimplex class: u: 0.19s, s: 0.08s, cu: 0s, cs: 0s, real: 0.267901s
+Read the file: u: 3.02s, s: 0.16s, cu: 0s, cs: 0s, real: 3.18415s
+Setup NetworkSimplex class: u: 0.18s, s: 0.08s, cu: 0s, cs: 0s, real: 0.261446s
+Run NetworkSimplex: u: 14499s, s: 0.16s, cu: 0s, cs: 0s, real: 14500.6s
+
+Feasible flow: found
+Min flow cost: 3250377104769
