@@ -13,6 +13,12 @@ for MINGZ in $(ls -S -r /tmp/data/*.min.gz); do
       continue
     fi
   fi
+  if [[ $MIN != *"goto"* ]]; then
+    continue
+  fi
+  # if [[ $MIN != *"spielman"*".i1."* ]]; then
+  #   continue
+  # fi
   echo "processing $MINGZ..."
   gunzip -k -f $MINGZ > $MIN
   $SOLVER $MIN > $OUTF 2>&1
