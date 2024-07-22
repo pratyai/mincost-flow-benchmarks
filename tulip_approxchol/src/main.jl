@@ -11,6 +11,7 @@ using JLD2
 using MultiFloats
 using TimerOutputs
 using Statistics
+using Printf
 
 UseFloatType = Float64
 
@@ -68,7 +69,8 @@ function main()
 
       local indimacs::String = r[:input_file]
       local netw = Dimacs.ReadDimacs(indimacs)
-      local lp = Integration.construct_tulip_model(netw, UseFloatType)
+      local lp =
+        Integration.construct_tulip_model(netw, UseFloatType, function (slug, T) end)
       local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
 
       # Throw away everything because this is just an warmup.
@@ -107,6 +109,16 @@ function main()
 
     local indimacs::String = r[:input_file]
     local netw = Dimacs.ReadDimacs(indimacs)
+    local badmat = if isnothing(solution_dir)
+      function (slug, T) end
+    else
+      function (slug::String, T::AbstractMatrix)
+        mkpath(solution_dir)
+        Ab_name = @sprintf "Ab_%s_%s.jld2" r[:name] slug
+        Ab_file = joinpath(solution_dir, Ab_name)
+        jldsave(Ab_file, true; T = T)
+      end
+    end
 
     local ntrials = 1
     if netw.G.m < 1000
@@ -117,7 +129,7 @@ function main()
     local trials = []
     for ntri = 1:ntrials
       GC.gc()
-      local lp = Integration.construct_tulip_model(netw, UseFloatType)
+      local lp = Integration.construct_tulip_model(netw, UseFloatType, badmat)
       local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
       push!(trials, (lp.solver.timer, status, iters, seconds))
     end
@@ -131,11 +143,13 @@ function main()
 
     # Save solution if asked for.
     local sol_file = ""
+    #=
     if !isnothing(solution_dir)
       mkpath(solution_dir)
       sol_file = joinpath(solution_dir, r[:name] * ".jld2")
       jldsave(sol_file, true; x = lp.solution.x)
     end
+    =#
 
     push!(
       out,

@@ -12,7 +12,11 @@ using DoubleFloats
 using Tulip
 using Random
 
-function construct_tulip_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Number}
+function construct_tulip_model(
+  netw::Dimacs.McfpNet,
+  _::Type{Tv},
+  badmat::Function,
+) where {Tv<:Number}
   Random.seed!(1)
   local A = sparse(Int8.(netw.G.IncidenceMatrix))
   local b = Tv.(netw.Demand)
@@ -40,7 +44,7 @@ function construct_tulip_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Num
   Tulip.set_parameter(lp, "OutputLevel", 1)  # enable output
   Tulip.set_parameter(lp, "Presolve_Level", 0)  # disable presolve
   Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
-  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}())
+  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}(badmat = badmat))
 
   # Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-1))
   Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-4))

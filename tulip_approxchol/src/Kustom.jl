@@ -10,6 +10,8 @@ using Tulip
 using Laplacians
 using SparseArrays
 using LinearAlgebra
+using JLD2
+using Printf
 
 using SparseArrays: AbstractSparseMatrix
 using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
@@ -20,6 +22,7 @@ Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   pcgtol::Tv = 5e-8
   # pcgtol::Tv = 1e-11
   # pcgtol::Tv = 1e-16
+  badmat::Function = function () end
 end
 
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
@@ -39,6 +42,11 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   ξ::Vector{Tv} # RHS of KKT system
   # Laplacians related
   sddm_solve::Function  # Solver for the SDDM system that yields `dy`
+
+  at_iter::Int = 0
+  at_solve::Int = 0
+  at_total_solve::Int = 0
+  badmat::Function = function () end
 end
 
 Tulip.KKT.backend(::Solver) = "Mcfp Tulip K1 Sddm"
@@ -60,7 +68,23 @@ function Tulip.KKT.setup(
   local sddm_solve =
     approxchol_sddm(sparse(Symmetric(K)); params = bk.params, tol = bk.pcgtol)
 
-  return Solver{Tv,Ti}(m, n, A, bk.params, bk.pcgtol, θ, regP, regD, K, ξ, sddm_solve)
+  return Solver{Tv,Ti}(
+    m,
+    n,
+    A,
+    bk.params,
+    bk.pcgtol,
+    θ,
+    regP,
+    regD,
+    K,
+    ξ,
+    sddm_solve,
+    0,
+    0,
+    0,
+    bk.badmat,
+  )
 end
 
 function Tulip.KKT.update!(
@@ -89,6 +113,8 @@ function Tulip.KKT.update!(
 
   kkt.sddm_solve =
     approxchol_sddm(sparse(Symmetric(kkt.K)); params = kkt.params, tol = kkt.pcgtol)
+  kkt.at_iter += 1
+  kkt.at_solve = 1
 
   return nothing
 end
@@ -106,6 +132,20 @@ function Tulip.KKT.solve!(
 
   # Solve normal equations
   dy .= kkt.sddm_solve(kkt.ξ; maxits = 100)
+  rel_r = if norm(kkt.ξ) != 0
+    r = kkt.K * dy - kkt.ξ
+    norm(r) / norm(kkt.ξ)
+  else
+    Tv(0)
+  end
+  @show rel_r, kkt.pcgtol
+  if rel_r > kkt.pcgtol
+    T = sparse(hcat(kkt.K, kkt.ξ))
+    slug = @sprintf "it=%d_sol=%d_tol_=%e_maxits=%d" kkt.at_iter kkt.at_solve kkt.pcgtol 100
+    kkt.badmat(slug, T)
+  end
+  kkt.at_solve += 1
+  kkt.at_total_solve += 1
 
   # Recover dx
   copyto!(dx, ξd)
