@@ -126,6 +126,7 @@ function main()
     elseif netw.G.m < 10000
       ntrials = 3
     end
+    # ntrials = 1
     local trials = []
     for ntri = 1:ntrials
       GC.gc()

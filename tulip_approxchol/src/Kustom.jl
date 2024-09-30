@@ -19,7 +19,8 @@ using Laplacians: ApproxCholParams, approxchol_sddm
 
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   params::ApproxCholParams = ApproxCholParams(:deg, 0, 2, 2)
-  pcgtol::Tv = 5e-8
+  pcgtol::Tv = 1e-4
+  # pcgtol::Tv = 5e-8
   # pcgtol::Tv = 1e-11
   # pcgtol::Tv = 1e-16
   badmat::Function = function () end
@@ -139,6 +140,15 @@ function Tulip.KKT.solve!(
     Tv(0)
   end
   @show rel_r, kkt.pcgtol
+  #=
+  fo = open("rhsnorm.csv", "a")
+  if kkt.at_iter == 1 && kkt.at_solve == 1
+    @printf fo "it,sol,rhsl1,rhsl2,rhslinf,dyl1,dyl2,dylinf,relerr\n"
+  end
+  @printf fo "%d,%d,%e,%e,%e,%e,%e,%e,%e\n" kkt.at_iter kkt.at_solve norm(kkt.ξ, 1) norm(kkt.ξ, 2) norm(kkt.ξ, Inf) norm(dy, 1) norm(dy, 2) norm(dy, Inf) rel_r
+  close(fo)
+  =#
+
   if rel_r > kkt.pcgtol
     T = sparse(hcat(kkt.K, kkt.ξ))
     slug = @sprintf "it=%d_sol=%d_tol_=%e_maxits=%d" kkt.at_iter kkt.at_solve kkt.pcgtol 100

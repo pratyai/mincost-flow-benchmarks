@@ -5,9 +5,13 @@ args = ["-e", "using JuliaFormatter; format(pwd(), indent=2);"]
 [tasks.nice]
 dependencies = ["juliafmt"]
 
-[tasks.lemon]
+[tasks.netgen]
 command = "julia"
 args = ["--project=.", "produce_lemon_netgen_input_spec.jl", "${@}"]
+
+[tasks.gridgen]
+command = "julia"
+args = ["--project=.", "produce_lemon_gridgen_input_spec.jl", "${@}"]
 
 [tasks.ss]
 command = "julia"

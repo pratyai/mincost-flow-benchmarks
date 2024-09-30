@@ -1,2 +1,4 @@
 name,input_file,bytes,vertices,arcs
-MaxPlanck/shallow_water1,/tmp/data/MaxPlanck/shallow_water1.min.gz,2228764,81920,245760
+spielman.k200.low0.25.up1.0e-6.i1,/tmp/data/spielman.k200.low0.25.up1.0e-6.i1.min.gz,52066258,2686802,5414002
+spielman.k100.low0.25.up1.0e-6.i1,/tmp/data/spielman.k100.low0.25.up1.0e-6.i1.min.gz,6537011,338402,687002
+spielman.k100.low0.25.up1.0e-6.i2,/tmp/data/spielman.k100.low0.25.up1.0e-6.i2.min.gz,6537118,338402,687002

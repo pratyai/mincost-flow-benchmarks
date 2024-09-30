@@ -1,0 +1,2 @@
+name,status,time_s,fact_s,solv_s,iters,sddm_calls,solution_file
+grid_wide_16a,Trm_IterationLimit,144.772873952,55.44700058,70.690686965,200,1030,
