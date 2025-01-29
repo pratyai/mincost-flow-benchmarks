@@ -8,6 +8,12 @@ using StatProfilerHTML
 using CSV
 using DataFrames
 using JLD2
+using MultiFloats
+using TimerOutputs
+using Statistics
+using Printf
+
+UseFloatType = Float64
 
 function parse_cmdargs()
   s = ArgParseSettings()
@@ -63,7 +69,8 @@ function main()
 
       local indimacs::String = r[:input_file]
       local netw = Dimacs.ReadDimacs(indimacs)
-      local lp = Integration.construct_tulip_model(netw, Float64)
+      local lp =
+        Integration.construct_tulip_model(netw, UseFloatType, function (slug, T) end)
       local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
 
       # Throw away everything because this is just an warmup.
@@ -75,7 +82,10 @@ function main()
     name = String[],
     status = String[],
     time_s = Float64[],
+    fact_s = Float64[],
+    solv_s = Float64[],
     iters = Int[],
+    sddm_calls = Int[],
     solution_file = String[],
   )
   if !isnothing(output_spec) && isfile(output_spec)
@@ -99,16 +109,48 @@ function main()
 
     local indimacs::String = r[:input_file]
     local netw = Dimacs.ReadDimacs(indimacs)
-    local lp = Integration.construct_tulip_model(netw, Float64)
-    local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
+    local badmat = if isnothing(solution_dir)
+      function (slug, T) end
+    else
+      function (slug::String, T::AbstractMatrix)
+        mkpath(solution_dir)
+        Ab_name = @sprintf "Ab_%s_%s.jld2" r[:name] slug
+        Ab_file = joinpath(solution_dir, Ab_name)
+        jldsave(Ab_file, true; T = T)
+      end
+    end
+
+    local ntrials = 1
+    if netw.G.m < 1000
+      ntrials = 11
+    elseif netw.G.m < 10000
+      ntrials = 3
+    end
+    # ntrials = 1
+    local trials = []
+    for ntri = 1:ntrials
+      GC.gc()
+      local lp = Integration.construct_tulip_model(netw, UseFloatType, badmat)
+      local lp, status, iters, seconds = Integration.solve_tulip_model(lp)
+      push!(trials, (lp.solver.timer, status, iters, seconds))
+    end
+    local medt = median([t[3] for t in trials])
+    local medidx = findfirst(t -> t[3] == medt, trials)
+    local to, status, iters, seconds = trials[medidx]
+
+    local fact_ns = TimerOutputs.time(to["Main loop"]["Step"]["Factorization"])
+    local solv_ns = TimerOutputs.time(to["Main loop"]["Step"]["Newton"]["KKT"])
+    local sddm_calls = TimerOutputs.ncalls(to["Main loop"]["Step"]["Newton"]["KKT"])
 
     # Save solution if asked for.
     local sol_file = ""
+    #=
     if !isnothing(solution_dir)
       mkpath(solution_dir)
       sol_file = joinpath(solution_dir, r[:name] * ".jld2")
       jldsave(sol_file, true; x = lp.solution.x)
     end
+    =#
 
     push!(
       out,
@@ -116,20 +158,25 @@ function main()
         :name => r[:name],
         :status => String(Symbol(status)),
         :time_s => seconds,
+        :fact_s => fact_ns * 1e-9,
+        :solv_s => solv_ns * 1e-9,
         :iters => iters,
+        :sddm_calls => sddm_calls,
         :solution_file => sol_file,
       );
-      promote = true
+      promote = true,
     )
     if !isnothing(output_spec)
       mkpath(dirname(output_spec))
-      CSV.write(output_spec, out)
+      CSV.write(output_spec, sort(out, [:name]))
+    else
+      @show out
     end
   end
 
   if !isnothing(output_spec)
     mkpath(dirname(output_spec))
-    CSV.write(output_spec, out)
+    CSV.write(output_spec, sort(out, [:name]))
   else
     @show out
   end

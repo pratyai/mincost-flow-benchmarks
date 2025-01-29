@@ -2,6 +2,7 @@ module Integration
 
 using FromFile
 using Dimacs
+@from "Kustom.jl" import Kustom
 
 using SparseArrays
 using LinearAlgebra
@@ -10,7 +11,11 @@ using DoubleFloats
 using Tulip
 using Random
 
-function construct_tulip_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Number}
+function construct_tulip_model(
+  netw::Dimacs.McfpNet,
+  _::Type{Tv},
+  badmat::Function,
+) where {Tv<:Number}
   Random.seed!(1)
   local A = sparse(Int8.(netw.G.IncidenceMatrix))
   local b = Tv.(netw.Demand)
@@ -37,8 +42,28 @@ function construct_tulip_model(netw::Dimacs.McfpNet, _::Type{Tv}) where {Tv<:Num
 
   Tulip.set_parameter(lp, "OutputLevel", 1)  # enable output
   Tulip.set_parameter(lp, "Presolve_Level", 0)  # disable presolve
-  Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-6))
-  Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-6))
+  Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
+  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}(badmat = badmat))
+
+  # Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-1))
+  Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-4))
+  # Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-6))
+  # Tulip.set_parameter(lp, "IPM_PRegMin", Tv(1e-8))
+
+  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-1))
+  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-4))
+  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-6))
+  Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-8))
+  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-10))
+  # Tulip.set_parameter(lp, "IPM_DRegMin", Tv(1e-12))
+
+  Tulip.set_parameter(lp, "IPM_IterationsLimit", 200)
+
+  se = Tv(sqrt(eps(Float64)))
+  Tulip.set_parameter(lp, "IPM_TolerancePFeas", se)
+  Tulip.set_parameter(lp, "IPM_ToleranceDFeas", se)
+  Tulip.set_parameter(lp, "IPM_ToleranceRGap", se)
+  Tulip.set_parameter(lp, "IPM_ToleranceIFeas", se)
   return lp
 end
 
