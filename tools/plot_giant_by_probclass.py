@@ -14,6 +14,11 @@ from scipy.optimize import least_squares
 
 hv.extension("bokeh")
 
+def format_param(p):
+    if abs(p) < 0.01:
+        return f"{p:.2e}"
+    return f"{p:.2f}"
+
 valcols = [
     "iters",
     "time_s",
@@ -112,6 +117,23 @@ def serve(th, x):
     return curve(x, *th)
 
 
+def curve_power(x, c, a):
+    return c * (x**a)
+
+
+def init_power():
+    return [1.0, 0.5]
+
+
+def kurve_power(th, x, y):
+    return curve_power(x, *th) - y
+
+
+def serve_power(th, x):
+    return curve_power(x, *th)
+
+
+
 df_reg = {}
 metric_kurves = {
     "iters": kurve_0,
@@ -128,6 +150,9 @@ metric_inits = {
     "time_us_per_arc_per_iter": init_0,
     "time_s": init_1,
 }
+
+FIT_POWER_LAW_FOR_ITERS = True
+
 for METRIC, pcls in itertools.product(METRICS, problems):
     t = (
         odf.filter(pl.col("solver") == SOLVER)
@@ -142,9 +167,16 @@ for METRIC, pcls in itertools.product(METRICS, problems):
         .sort([AXIS])
     )
 
+    if FIT_POWER_LAW_FOR_ITERS and METRIC == "iters":
+        kurve_func = kurve_power
+        init_func = init_power
+    else:
+        kurve_func = metric_kurves[METRIC]
+        init_func = metric_inits[METRIC]
+
     lsq = least_squares(
-        metric_kurves[METRIC],
-        metric_inits[METRIC](),
+        kurve_func,
+        init_func(),
         loss="linear",
         # f_scale=0.1,
         args=(t[:, AXIS], t[:, METRIC]),
@@ -181,7 +213,6 @@ for METRIC in METRICS:
             "#8c564b",
         ][: len(probs)]
         all_colours = dict(zip(probs, all_colours))
-        p = []
 
         tdf = df.filter(pl.col("probclass").is_in(probs)).with_columns(
             marker=pl.col("probclass").replace(all_markers),
@@ -192,45 +223,68 @@ for METRIC in METRICS:
         xgap, xmid = np.sqrt(xlim[1] / xlim[0]), np.sqrt(xlim[0] * xlim[1])
         xlim = (xmid / (xgap * 2), xmid * (xgap * 4))
         tdf = tdf.filter(pl.col(AXIS) <= xlim[1])
+
+        p_elements = []
         if METRIC == "iters":
-            p.append(hv.HLine(200).opts(color="red", line_width=0.5))
+            p_elements.append(hv.HLine(200).opts(color="red", line_width=0.5))
 
         ylim = (tdf[:, METRIC].min(), tdf[:, METRIC].max())
-        ylim = (
-            ylim[0] - (ylim[1] - ylim[0]) * 0.25,
-            ylim[1] + (ylim[1] - ylim[0]) * 0.1,
-        )
-        p.append(
-            tdf.hvplot.scatter(
-                x=AXIS,
-                y=METRIC,
-                by="probclass",
-                marker="marker",
-                color="color",
-                fill_alpha=0.5,
-                height=400,
-                width=400,
-                title=key,
-                yticks=10,
-                # xticks=10,
-                ylim=ylim,
-                xlim=xlim,
-                rot=45,
-                xformatter=NumeralTickFormatter(format="0a"),
-                yformatter=yformatter[METRIC],
-                grid=True,
-                logx=True,
-            ).opts(
-                legend_position="bottom_right",
-                legend_cols=3,
+        if METRIC == "iters":
+            ylim = (
+                ylim[0] * 0.8,
+                ylim[1] * 1.2,
             )
+        else:
+            ylim = (
+                ylim[0] - (ylim[1] - ylim[0]) * 0.25,
+                ylim[1] + (ylim[1] - ylim[0]) * 0.1,
+            )
+
+        scatter_plot = tdf.hvplot.scatter(
+            x=AXIS,
+            y=METRIC,
+            by="probclass",
+            marker="marker",
+            color="color",
+            fill_alpha=0.5,
+            height=400,
+            width=400,
+            title=key,
+            yticks=10,
+            # xticks=10,
+            ylim=ylim,
+            xlim=xlim,
+            rot=45,
+            xformatter=NumeralTickFormatter(format="0a"),
+            yformatter=yformatter[METRIC],
+            grid=True,
+            logx=True,
+            logy=(METRIC == "iters"),
+        ).opts(
+            legend_position="bottom_right",
+            legend_cols=3,
         )
 
+        lines = []
+        texts = []
         x = np.geomspace(tdf[:, AXIS].min(), tdf[:, AXIS].max(), num=100)
-        for pcls in probs:
-            y = metric_serves[METRIC](df_reg[(METRIC, pcls)], x)
+        for i, pcls in enumerate(probs):
+            params = df_reg[(METRIC, pcls)]
+            if FIT_POWER_LAW_FOR_ITERS and METRIC == "iters":
+                serve_func = serve_power
+                label_text = f"{format_param(params[0])} * arcs^{params[1]:.2f}"
+            else:
+                serve_func = metric_serves[METRIC]
+                if METRIC == "time_s":
+                    label_text = (
+                        f"{format_param(params[0])} * arcs * log(arcs)^{params[1]:.2f}"
+                    )
+                else:
+                    label_text = f"{format_param(params[0])} * log(arcs)^{params[1]:.2f}"
+
+            y = serve_func(params, x)
             xy = pl.DataFrame({AXIS: x, "y": y})
-            p.append(
+            lines.append(
                 xy.hvplot.line(
                     x=AXIS,
                     y="y",
@@ -240,7 +294,23 @@ for METRIC in METRICS:
                     label=pcls,
                 )
             )
-        plotz.append(hv.Overlay(p).opts(xlabel=AXIS, ylabel=METRIC))
+
+            text_x = xmid
+            if METRIC == "iters":  # log scale
+                text_y = ylim[1] / (1.1**i)
+            else:  # linear scale
+                text_y = ylim[1] - i * (ylim[1] - ylim[0]) * 0.05
+
+            texts.append(
+                hv.Text(text_x, text_y, label_text, halign="center", valign="top").opts(
+                    color=all_colours[pcls],
+                    text_font_size="8pt",
+                    bgcolor="white",
+                )
+            )
+
+        p = scatter_plot * hv.Overlay(lines) * hv.Overlay(texts)
+        plotz.append(p.opts(xlabel=AXIS, ylabel=METRIC))
 
 p = plotz[0]
 for pt in plotz[1:]:
