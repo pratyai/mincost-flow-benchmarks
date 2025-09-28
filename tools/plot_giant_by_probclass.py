@@ -33,7 +33,7 @@ problems_3 = sorted(["grid_long", "grid_square", "grid_wide"])
 problems_4 = sorted(["goto_8", "goto_sr"])
 problems_5 = sorted(["road_flow", "road_path"])
 # problem_groups = [problems_1, problems_2]
-problem_groups = {"netgen": problems_1, "gridgen": problems_2, "grid graph": problems_3}
+problem_groups = {"netgen": problems_1, "grid graph": problems_3}
 # problem_groups = [problems_1, problems_2 , problems_3, problems_4]
 # problem_groups = [problems_5]
 problems = sorted(list(itertools.chain(*problem_groups.values())))
@@ -315,5 +315,5 @@ for METRIC in METRICS:
 p = plotz[0]
 for pt in plotz[1:]:
     p = p + pt
-p = p.cols(3).opts(shared_axes=False)
+p = p.cols(2).opts(shared_axes=False)
 hvplot.show(p)
