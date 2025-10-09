@@ -1,0 +1,10 @@
+name = "Dimacs"
+uuid = "56f16b60-4eb9-43c5-8143-b5f1c39a6b17"
+authors = ["Pratyai Mazumder <pratyai.mazumder@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+GZip = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Scanf = "6ef1bc8b-493b-44e1-8d40-549aa65c4b41"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
