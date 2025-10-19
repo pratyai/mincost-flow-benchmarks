@@ -29,6 +29,7 @@ using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
 Backend for the custom CHOLMOD KKT solver.
 """
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
+  nested_dissection::Bool = false
 end
 
 """
@@ -72,7 +73,9 @@ function Tulip.KKT.setup(
   local ξ = zeros(Tv, m)
   local K = sparse(A * A') + spdiagm(0 => regD)
 
-  local chol_factor = cholesky(Symmetric(K))
+  local K_cholmod = SuiteSparse.CHOLMOD.Sparse(Symmetric(K))
+  local F = SuiteSparse.CHOLMOD.symbolic(K_cholmod; nested_dissection=bk.nested_dissection)
+  local chol_factor = SuiteSparse.CHOLMOD.cholesky!(F, K_cholmod)
 
   return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, chol_factor)
 end
@@ -141,13 +144,17 @@ const CONFIG = Dict(
     "IPM_DRegMin" => 1e-6,
 )
 
+const CHOLMOD_CONFIG = Dict(
+    "NestedDissection" => true,
+)
+
 function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}) where {Tv<:Number}
   lp = SolverCommon.create_tulip_model(netw, Tv)
 
   Tulip.set_parameter(lp, "OutputLevel", 0)
   Tulip.set_parameter(lp, "Presolve_Level", 0)
   Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
-  Tulip.set_parameter(lp, "KKT_Backend", CholmodKKT.Backend{Tv}())
+  Tulip.set_parameter(lp, "KKT_Backend", CholmodKKT.Backend{Tv}(nested_dissection=CHOLMOD_CONFIG["NestedDissection"]))
 
   for (k, v) in CONFIG
     Tulip.set_parameter(lp, k, Tv(v))
@@ -184,7 +191,8 @@ end
 Get a string representation of the solver's configuration.
 """
 function get_config_string()
-  return "KKT_Backend=CustomCHOLMOD, " * join(["$k=$v" for (k, v) in CONFIG], ", ")
+  all_config = merge(CONFIG, CHOLMOD_CONFIG)
+  return "KKT_Backend=CustomCHOLMOD, " * join(["$k=$v" for (k, v) in all_config], ", ")
 end
 
 end # module TulipCHOLMOD
