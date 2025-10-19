@@ -57,6 +57,11 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   ξ::Vector{Tv} # RHS of KKT system
   # Laplacians related
   sddm_solve::Function  # Solver for the SDDM system that yields `dy`
+
+  # Solution quality
+  ipm_iter::Int
+  solve_in_iter::Int
+  residual_history::Vector{Tuple{Int, Int, Tv}}
 end
 
 Tulip.KKT.backend(::Solver) = "Mcfp Tulip K1 Sddm"
@@ -83,7 +88,7 @@ function Tulip.KKT.setup(
   local sddm_solve =
     approxchol_sddm(sparse(Symmetric(K)); params = bk.params, tol = bk.pcgtol)
 
-  return Solver{Tv,Ti}(m, n, A, bk.params, bk.pcgtol, θ, regP, regD, K, ξ, sddm_solve)
+  return Solver{Tv,Ti}(m, n, A, bk.params, bk.pcgtol, θ, regP, regD, K, ξ, sddm_solve, 0, 0, [])
 end
 
 """
@@ -98,6 +103,9 @@ function Tulip.KKT.update!(
   regD::AbstractVector{Tv},
 ) where {Tv<:Number,Ti<:Integer}
   local m, n = kkt.m, kkt.n
+
+  kkt.ipm_iter += 1
+  kkt.solve_in_iter = 0
 
   # Sanity checks
   length(θ) == n ||
@@ -133,12 +141,18 @@ function Tulip.KKT.solve!(
   ξp::AbstractVector{Tv},
   ξd::AbstractVector{Tv},
 ) where {Tv<:Number,Ti<:Integer}
+  kkt.solve_in_iter += 1
+
   local d = one(Tv) ./ (kkt.θ .+ kkt.regP)
   copyto!(kkt.ξ, ξp)
   mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
 
   # Solve normal equations
   dy .= kkt.sddm_solve(kkt.ξ; maxits = 100)
+
+  # Compute residual norm
+  local residual_norm = norm(kkt.K * dy - kkt.ξ)
+  push!(kkt.residual_history, (kkt.ipm_iter, kkt.solve_in_iter, residual_norm))
 
   # Recover dx
   copyto!(dx, ξd)
@@ -198,29 +212,27 @@ end
 
 end # module Kustom
 
-const CONFIG = Dict(
-    "IPM_PRegMin" => 1e-4,
-    "IPM_DRegMin" => 1e-8,
-    "IPM_IterationsLimit" => 200,
-)
-
-const APPROXCHOL_PARAMS = ApproxCholParams(:deg, 0, 2, 2)
-
-const KUSTOM_CONFIG = Dict(
-    "pcgtol" => 5e-8,
-    "ApproxCholParams" => "(:deg, 0, 2, 2)",
-)
-
-
-function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}) where {Tv<:Number}
+function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) where {Tv<:Number}
   lp = SolverCommon.create_tulip_model(netw, Tv)
 
   Tulip.set_parameter(lp, "OutputLevel", 1)  # enable output
   Tulip.set_parameter(lp, "Presolve_Level", 0)  # disable presolve
   Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
-  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}(; params=APPROXCHOL_PARAMS, pcgtol=Tv(KUSTOM_CONFIG["pcgtol"])))
 
-  for (k, v) in CONFIG
+  kustom_params = get(config, "kustom_parameters", Dict())
+  pcgtol = get(kustom_params, "pcgtol", 5e-8)
+  
+  approxchol_params_dict = get(kustom_params, "ApproxCholParams", Dict())
+  approxchol_type = Symbol(get(approxchol_params_dict, "type", "deg"))
+  approxchol_stag_test = get(approxchol_params_dict, "stag_test", 0)
+  approxchol_split = get(approxchol_params_dict, "split", 2)
+  approxchol_merge = get(approxchol_params_dict, "merge", 2)
+  approxchol_params = ApproxCholParams(approxchol_type, approxchol_stag_test, approxchol_split, approxchol_merge)
+
+  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}(; params=approxchol_params, pcgtol=Tv(pcgtol)))
+
+  params = get(config, "parameters", Dict())
+  for (k, v) in params
     Tulip.set_parameter(lp, k, v)
   end
 
@@ -233,18 +245,19 @@ function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}) where {Tv<:Numb
 end
 
 """
-    solve(netw::Dimacs.McfpNet)
+    solve(netw::Dimacs.McfpNet, config::Dict)
 
 Solve a minimum cost flow problem using the TulipApproxChol solver.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The minimum cost flow problem to solve.
+- `config::Dict`: A dictionary with the solver configuration.
 
 # Returns
 - A named tuple with the solver status, number of iterations, solution time, solution vector, and additional solver-specific statistics.
 """
-function solve(netw::Dimacs.McfpNet)
-  lp = construct_tulip_model(netw, Float64)
+function solve(netw::Dimacs.McfpNet, config::Dict)
+  lp = construct_tulip_model(netw, Float64, config)
   Tulip.optimize!(lp)
 
   status = Tulip.get_attribute(lp, Tulip.Status())
@@ -258,17 +271,9 @@ function solve(netw::Dimacs.McfpNet)
   solv_ns = TimerOutputs.time(to["Main loop"]["Step"]["Newton"]["KKT"])
   sddm_calls = TimerOutputs.ncalls(to["Main loop"]["Step"]["Newton"]["KKT"])
 
-  return (; status, iters, seconds, solution, fact_s = fact_ns * 1e-9, solv_s = solv_ns * 1e-9, sddm_calls)
-end
+  residual_history = lp.solver.kkt.residual_history
 
-"""
-    get_config_string() -> String
-
-Get a string representation of the solver's configuration.
-"""
-function get_config_string()
-    all_config = merge(CONFIG, KUSTOM_CONFIG)
-    return "KKT_Backend=Mcfp Tulip K1 Sddm, " * join(["$k=$v" for (k, v) in all_config], ", ")
+  return (; status, iters, seconds, solution, fact_s = fact_ns * 1e-9, solv_s = solv_ns * 1e-9, sddm_calls, residual_history)
 end
 
 end # module TulipApproxChol

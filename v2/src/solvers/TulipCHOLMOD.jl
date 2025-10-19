@@ -50,6 +50,11 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   
   # CHOLMOD Factorization
   chol_factor::SuiteSparse.CHOLMOD.Factor{Tv}
+
+  # Solution quality
+  ipm_iter::Int
+  solve_in_iter::Int
+  residual_history::Vector{Tuple{Int, Int, Tv}}
 end
 
 Tulip.KKT.backend(::Solver) = "CustomCHOLMOD"
@@ -77,7 +82,7 @@ function Tulip.KKT.setup(
   local F = SuiteSparse.CHOLMOD.symbolic(K_cholmod; nested_dissection=bk.nested_dissection)
   local chol_factor = SuiteSparse.CHOLMOD.cholesky!(F, K_cholmod)
 
-  return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, chol_factor)
+  return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, chol_factor, 0, 0, [])
 end
 
 """
@@ -92,6 +97,9 @@ function Tulip.KKT.update!(
   regD::AbstractVector{Tv},
 ) where {Tv<:Number,Ti<:Integer}
   local m, n = kkt.m, kkt.n
+
+  kkt.ipm_iter += 1
+  kkt.solve_in_iter = 0
 
   copyto!(kkt.θ, θ)
   copyto!(kkt.regP, regP)
@@ -119,12 +127,18 @@ function Tulip.KKT.solve!(
   ξp::AbstractVector{Tv},
   ξd::AbstractVector{Tv},
 ) where {Tv<:Number,Ti<:Integer}
+  kkt.solve_in_iter += 1
+
   local d = one(Tv) ./ (kkt.θ .+ kkt.regP)
   copyto!(kkt.ξ, ξp)
   mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
 
   # Solve normal equations
   dy .= kkt.chol_factor \ kkt.ξ
+
+  # Compute residual norm
+  local residual_norm = norm(kkt.K * dy - kkt.ξ)
+  push!(kkt.residual_history, (kkt.ipm_iter, kkt.solve_in_iter, residual_norm))
 
   # Recover dx
   copyto!(dx, ξd)
@@ -139,60 +153,47 @@ end # module CholmodKKT
 include("common.jl")
 using .SolverCommon
 
-const CONFIG = Dict(
-    "IPM_PRegMin" => 1e-6,
-    "IPM_DRegMin" => 1e-6,
-)
-
-const CHOLMOD_CONFIG = Dict(
-    "NestedDissection" => true,
-)
-
-function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}) where {Tv<:Number}
+function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) where {Tv<:Number}
   lp = SolverCommon.create_tulip_model(netw, Tv)
 
   Tulip.set_parameter(lp, "OutputLevel", 0)
   Tulip.set_parameter(lp, "Presolve_Level", 0)
   Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
-  Tulip.set_parameter(lp, "KKT_Backend", CholmodKKT.Backend{Tv}(nested_dissection=CHOLMOD_CONFIG["NestedDissection"]))
+  
+  cholmod_params = get(config, "cholmod_parameters", Dict())
+  nested_dissection = get(cholmod_params, "NestedDissection", false)
+  Tulip.set_parameter(lp, "KKT_Backend", CholmodKKT.Backend{Tv}(nested_dissection=nested_dissection))
 
-  for (k, v) in CONFIG
+  params = get(config, "parameters", Dict())
+  for (k, v) in params
     Tulip.set_parameter(lp, k, Tv(v))
   end
   return lp
 end
 
 """
-    solve(netw::Dimacs.McfpNet)
+    solve(netw::Dimacs.McfpNet, config::Dict)
 
-Solve a minimum cost flow problem using the TulipCHOLMOD solver.
+Solve a minimum cost flow problem using the TulipCHOLMOD solver with a given configuration.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The minimum cost flow problem to solve.
+- `config::Dict`: A dictionary with the solver configuration.
 
 # Returns
 - A named tuple with the solver status, number of iterations, solution time, and solution vector.
 """
-function solve(netw::Dimacs.McfpNet)
-  lp = construct_tulip_model(netw, Float64)
+function solve(netw::Dimacs.McfpNet, config::Dict)
+  lp = construct_tulip_model(netw, Float64, config)
   Tulip.optimize!(lp)
 
   status = Tulip.get_attribute(lp, Tulip.Status())
   iters = Tulip.get_attribute(lp, Tulip.BarrierIterations())
   seconds = Tulip.get_attribute(lp, Tulip.SolutionTime())
   solution = lp.solution.x
+  residual_history = lp.solver.kkt.residual_history
 
-  return (; status, iters, seconds, solution)
-end
-
-"""
-    get_config_string() -> String
-
-Get a string representation of the solver's configuration.
-"""
-function get_config_string()
-  all_config = merge(CONFIG, CHOLMOD_CONFIG)
-  return "KKT_Backend=CustomCHOLMOD, " * join(["$k=$v" for (k, v) in all_config], ", ")
+  return (; status, iters, seconds, solution, residual_history)
 end
 
 end # module TulipCHOLMOD

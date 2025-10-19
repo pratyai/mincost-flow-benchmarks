@@ -1,0 +1,15 @@
+solver = "tulip_approxchol"
+
+[parameters]
+IPM_PRegMin = 1e-4
+IPM_DRegMin = 1e-8
+IPM_IterationsLimit = 200
+
+[kustom_parameters]
+pcgtol = 5e-8
+
+[kustom_parameters.ApproxCholParams]
+type = "deg"
+stag_test = 0
+split = 2
+merge = 2
