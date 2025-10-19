@@ -105,10 +105,20 @@ You can use any SQLite client to browse and analyze the results.
 
 ## Generating Problem Instances
 
-To generate the grid problem instances used for benchmarking, run the following script:
+To generate the grid problem instances used for benchmarking, there are two scripts:
 
-```bash
-julia --project=. scripts/generate_grid_problems.jl
-```
+*   **`scripts/generate_grid_problems.jl`**: Generates grid problems with random capacities and costs (named "widegrid").
 
-This script will create `.min.gz` and `.min` files in the `data/problems/unifwidegrid/` directory and update the `data/specs/unifwidegrid.inspec` file with the generated problems.
+    ```bash
+    julia --project=. scripts/generate_grid_problems.jl
+    ```
+
+    This script will create `.min.gz` and `.min` files in the `data/problems/widegrid/` directory and update the `data/specs/widegrid.inspec` file with the generated problems.
+
+*   **`scripts/generate_uniform_grid_problems.jl`**: Generates grid problems with uniform capacities and costs (all 1, named "unifwidegrid").
+
+    ```bash
+    julia --project=. scripts/generate_uniform_grid_problems.jl
+    ```
+
+    This script will create `.min.gz` and `.min` files in the `data/problems/unifwidegrid/` directory and update the `data/specs/unifwidegrid.inspec` file with the generated problems.

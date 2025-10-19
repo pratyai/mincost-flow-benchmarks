@@ -40,9 +40,7 @@ function parse_cmdargs()
     return parse_args(s)
 end
 
-function main()
-    local args = parse_cmdargs()
-    @show args
+function run_benchmarks(args::Dict)
 
     local config_files = args["configs"]
 
@@ -339,6 +337,16 @@ function main()
             end
         end # Closes 'for parsed_config in parsed_configs'
     end # Closes 'for r in eachrow(probspec)'
-end # Closes 'function main()'
+end # Closes 'function run_benchmarks()'
 
-main()
+function main()
+    local args = parse_cmdargs()
+    @show args
+
+    # Run benchmarks with the parsed arguments
+    run_benchmarks(args)
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end

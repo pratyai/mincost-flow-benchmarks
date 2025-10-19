@@ -10,24 +10,19 @@ using .GridGraphs
 # --- Configuration ---
 h_fixed = 5
 w_values = round.(Int, 10 .^ (range(log10(5), stop = log10(1_000_000), length = 20)))
-max_cap = 100
-max_cost = 10
 
-problems_dir = "data/problems/widegrid"
+problems_dir = "data/problems/unifwidegrid"
 specs_dir = "data/specs"
-spec_filename = joinpath(specs_dir, "widegrid.inspec")
+spec_filename = joinpath(specs_dir, "unifwidegrid.inspec")
 
 # Ensure output directories exist
 mkpath(problems_dir)
 mkpath(specs_dir)
 
-# Initialize random number generator for reproducibility
-rng = MersenneTwister(1234)
-
 # Prepare spec file content
 spec_lines = ["name,input_file,bytes"]
 
-println("Generating grid problems...")
+println("Generating uniform grid problems...")
 
 for w in w_values
     problem_name = "grid_h$(h_fixed)_w$(w)"
@@ -35,7 +30,7 @@ for w in w_values
     output_file_path_min = joinpath(problems_dir, "$(problem_name).min")
 
     println("  Generating $(problem_name)...")
-    mcfp_net = GridGraphs.generate_grid_graph_mcfp(h_fixed, w, max_cap, max_cost, rng)
+    mcfp_net = GridGraphs.generate_grid_graph_mcfp_uniform(h_fixed, w)
 
     # Write to DIMACS .min.gz file
     Dimacs.WriteDimacs(output_file_path_gz, mcfp_net)
@@ -51,7 +46,7 @@ for w in w_values
     file_bytes = filesize(output_file_path_gz)
     push!(
         spec_lines,
-        "$(problem_name),data/problems/widegrid/$(problem_name).min.gz,$(file_bytes)",
+        "$(problem_name),data/problems/unifwidegrid/$(problem_name).min.gz,$(file_bytes)",
     )
 end
 
@@ -62,4 +57,4 @@ open(spec_filename, "w") do io
     end
 end
 
-println("Generated $(length(w_values)) grid problems and spec file: $(spec_filename)")
+println("Generated $(length(w_values)) uniform grid problems and spec file: $(spec_filename)")
