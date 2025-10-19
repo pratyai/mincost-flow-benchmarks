@@ -6,7 +6,8 @@ IPM_DRegMin = 1e-8
 IPM_IterationsLimit = 200
 
 [kustom_parameters]
-pcgtol = 5e-8
+pcg_maxits = 100 # Maximum number of PCG iterations
+pcg_tol = 5e-8 # Target precision for the PCG solver
 
 [kustom_parameters.ApproxCholParams]
 type = "deg"

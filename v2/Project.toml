@@ -7,6 +7,7 @@ authors = ["Gemini"]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Debugger = "31a5f54b-26ea-5ae9-a837-f05ce5417438"
 Dimacs = "56f16b60-4eb9-43c5-8143-b5f1c39a6b17"
 GZip = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
@@ -24,6 +25,7 @@ Tulip = "6dd1b50a-3aae-11e9-10b5-ef983d2400fa"
 
 [compat]
 ArgParse = "1.2.0"
+DataStructures = "0.19.1"
 Debugger = "0.7.15"
 InteractiveUtils = "1.11.0"
 Plots = "1.41.1"

@@ -4,6 +4,7 @@ using DataFrames
 using JLD2
 using SQLite
 using TOML
+using Debugger
 
 using Dimacs
 
@@ -68,7 +69,18 @@ function main()
   SQLite.execute(db, """
     CREATE TABLE IF NOT EXISTS configs (
         id INTEGER PRIMARY KEY,
-        config_text TEXT UNIQUE
+        config_text TEXT UNIQUE,
+        solver_name TEXT,
+        ipm_preg_min REAL,
+        ipm_dreg_min REAL,
+        ipm_iterations_limit INTEGER,
+        pcg_maxits INTEGER,
+        pcg_tol REAL,
+        approxchol_type TEXT,
+        approxchol_stag_test INTEGER,
+        approxchol_split INTEGER,
+        approxchol_merge INTEGER,
+        cholmod_nested_dissection BOOLEAN
     )
   """)
   SQLite.execute(db, """
@@ -94,6 +106,7 @@ function main()
         ipm_iter INTEGER,
         solve_in_iter INTEGER,
         residual_norm REAL,
+        pcg_iterations INTEGER,
         FOREIGN KEY (run_id) REFERENCES runs(id)
     )
   """)
@@ -109,6 +122,27 @@ function main()
     solver = SOLVERS[solver_name]
 
     # Get or create config_id
+    solver_name = config["solver"]
+
+    # Extract common parameters
+    ipm_preg_min = get(config, "parameters", Dict()) |> (p -> get(p, "IPM_PRegMin", missing))
+    ipm_dreg_min = get(config, "parameters", Dict()) |> (p -> get(p, "IPM_DRegMin", missing))
+    ipm_iterations_limit = get(config, "parameters", Dict()) |> (p -> get(p, "IPM_IterationsLimit", missing))
+
+    # Extract approxchol specific parameters
+    pcg_maxits = get(config, "kustom_parameters", Dict()) |> (kp -> get(kp, "pcg_maxits", missing))
+    pcg_tol = get(config, "kustom_parameters", Dict()) |> (kp -> get(kp, "pcg_tol", missing))
+    
+    approxchol_params_dict = get(config, "kustom_parameters", Dict()) |> (kp -> get(kp, "ApproxCholParams", Dict()))
+    approxchol_type = get(approxchol_params_dict, "type", missing)
+    approxchol_stag_test = get(approxchol_params_dict, "stag_test", missing)
+    approxchol_split = get(approxchol_params_dict, "split", missing)
+    approxchol_merge = get(approxchol_params_dict, "merge", missing)
+
+    # Extract cholmod specific parameters
+    cholmod_params = get(config, "cholmod_parameters", Dict())
+    cholmod_nested_dissection = get(cholmod_params, "NestedDissection", missing)
+
     query = DBInterface.execute(db, "SELECT id FROM configs WHERE config_text = ?", (config_text,))
     config_id = missing
     for row in query
@@ -116,7 +150,17 @@ function main()
     end
 
     if ismissing(config_id)
-        DBInterface.execute(db, "INSERT INTO configs (config_text) VALUES (?)", (config_text,))
+        DBInterface.execute(db, """
+            INSERT INTO configs (
+                config_text, solver_name, ipm_preg_min, ipm_dreg_min, ipm_iterations_limit,
+                pcg_maxits, pcg_tol, approxchol_type, approxchol_stag_test,
+                approxchol_split, approxchol_merge, cholmod_nested_dissection
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            config_text, solver_name, ipm_preg_min, ipm_dreg_min, ipm_iterations_limit,
+            pcg_maxits, pcg_tol, approxchol_type, approxchol_stag_test,
+            approxchol_split, approxchol_merge, cholmod_nested_dissection
+        ))
         config_id = SQLite.last_insert_rowid(db)
     end
 
@@ -157,8 +201,10 @@ function main()
 
       # Insert history
       if haskey(results, :residual_history) && !ismissing(results.residual_history)
-        for (ipm_iter, solve_in_iter, residual) in results.residual_history
-          DBInterface.execute(db, "INSERT INTO solver_history (run_id, ipm_iter, solve_in_iter, residual_norm) VALUES (?, ?, ?, ?)", (run_id, ipm_iter, solve_in_iter, residual))
+        pcg_history = haskey(results, :pcg_iterations_history) ? results.pcg_iterations_history : missing
+        for (idx, (ipm_iter, solve_in_iter, residual)) in enumerate(results.residual_history)
+          pcg_iters = ismissing(pcg_history) || isempty(pcg_history) ? missing : pcg_history[idx]
+          DBInterface.execute(db, "INSERT INTO solver_history (run_id, ipm_iter, solve_in_iter, residual_norm, pcg_iterations) VALUES (?, ?, ?, ?, ?)", (run_id, ipm_iter, solve_in_iter, residual, pcg_iters))
         end
       end
     end

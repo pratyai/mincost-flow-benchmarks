@@ -230,9 +230,10 @@ function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) w
   Tulip.set_parameter(lp, "KKT_Backend", CholmodKKT.Backend{Tv}(nested_dissection=nested_dissection))
 
   params = get(config, "parameters", Dict())
-  for (k, v) in params
-    Tulip.set_parameter(lp, k, Tv(v))
-  end
+  # Explicitly set parameters, ensuring correct types
+  Tulip.set_parameter(lp, "IPM_PRegMin", Tv(get(params, "IPM_PRegMin", 1e-6)))
+  Tulip.set_parameter(lp, "IPM_DRegMin", Tv(get(params, "IPM_DRegMin", 1e-6)))
+  Tulip.set_parameter(lp, "IPM_IterationsLimit", Int(get(params, "IPM_IterationsLimit", 200)))
   return lp
 end
 

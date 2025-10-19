@@ -44,12 +44,13 @@ Backend for the custom approximate Cholesky KKT solver.
 # Fields
 - `params::ApproxCholParams`: Parameters for the approximate Cholesky factorization,
   controlling aspects like ordering strategy, edge splitting, and merging.
-- `pcgtol::Tv`: Tolerance for the Preconditioned Conjugate Gradient (PCG) solver
+- `pcg_tol::Tv`: Tolerance for the Preconditioned Conjugate Gradient (PCG) solver
   used within the approximate Cholesky factorization.
 """
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   params::ApproxCholParams = ApproxCholParams(:deg, 0, 2, 2)
-  pcgtol::Tv = 5e-8
+  pcg_maxits::Int = 100
+  pcg_tol::Tv = 5e-8
 end
 
 """
@@ -63,7 +64,7 @@ workspace variables, and solution quality metrics for the KKT system.
 - `n::Ti`: Number of variables.
 - `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix.
 - `params::ApproxCholParams`: Parameters for the approximate Cholesky factorization.
-- `pcgtol::Tv`: Tolerance for the PCG solver.
+- `pcg_tol::Tv`: Tolerance for the PCG solver.
 - `θ::Vector{Tv}`: Diagonal scaling vector.
 - `regP::Vector{Tv}`: Primal regularization vector.
 - `regD::Vector{Tv}`: Dual regularization vector.
@@ -81,7 +82,8 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   A::AbstractSparseMatrix{Tv,Ti}
   # Laplacians related
   params::ApproxCholParams  # Parameter to use when constructing the SDDM solver
-  pcgtol::Tv  # Parameter to use when constructing the SDDM solver
+  pcg_maxits::Int  # Maximum PCG iterations
+  pcg_tol::Tv  # PCG tolerance
 
   # Workspace
   θ::Vector{Tv} # Diagonal scaling
@@ -96,6 +98,7 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
   ipm_iter::Int
   solve_in_iter::Int
   residual_history::Vector{Tuple{Int, Int, Tv}}
+  pcg_iterations_history::Vector{Int}
 end
 
 Tulip.KKT.backend(::Solver) = "Mcfp Tulip K1 Sddm"
@@ -129,9 +132,9 @@ function Tulip.KKT.setup(
   local K = sparse(A * A') + spdiagm(0 => regD)
 
   local sddm_solve =
-    approxchol_sddm(sparse(Symmetric(K)); params = bk.params, tol = bk.pcgtol)
+    approxchol_sddm(sparse(Symmetric(K)); params = bk.params, maxits = bk.pcg_maxits, tol = bk.pcg_tol)
 
-  return Solver{Tv,Ti}(m, n, A, bk.params, bk.pcgtol, θ, regP, regD, K, ξ, sddm_solve, 0, 0, [])
+  return Solver{Tv,Ti}(; m=m, n=n, A=A, params=bk.params, pcg_maxits=bk.pcg_maxits, pcg_tol=bk.pcg_tol, θ=θ, regP=regP, regD=regD, K=K, ξ=ξ, sddm_solve=sddm_solve, ipm_iter=0, solve_in_iter=0, residual_history=[], pcg_iterations_history=[])
 end
 
 """
@@ -174,7 +177,7 @@ function Tulip.KKT.update!(
   kkt.K = (kkt.A * D * kkt.A') + spdiagm(0 => kkt.regD)
 
   kkt.sddm_solve =
-    approxchol_sddm(sparse(Symmetric(kkt.K)); params = kkt.params, tol = kkt.pcgtol)
+    approxchol_sddm(sparse(Symmetric(kkt.K)); params = kkt.params, maxits = kkt.pcg_maxits, tol = kkt.pcg_tol)
 
   return nothing
 end
@@ -205,7 +208,9 @@ function Tulip.KKT.solve!(
   mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
 
   # Solve normal equations
-  dy .= kkt.sddm_solve(kkt.ξ; maxits = 100)
+  local current_pcg_its = [0] # Initialize with a single element for pcg to set
+  dy .= kkt.sddm_solve(kkt.ξ; maxits = 100, pcgIts = current_pcg_its)
+  push!(kkt.pcg_iterations_history, current_pcg_its[1]) # Append the single iteration count
 
   # Compute residual norm
   local residual_norm = norm(kkt.K * dy - kkt.ξ)
@@ -255,7 +260,7 @@ This function sets up the problem and applies solver-specific parameters from th
 - `netw::Dimacs.McfpNet`: The DIMACS MCFP network data.
 - `Tv::Type`: The numeric type to use for the model (e.g., `Float64`).
 - `config::Dict`: A dictionary containing solver-specific configurations,
-  including `kustom_parameters` for `ApproxCholParams` and `pcgtol`.
+  including `kustom_parameters` for `ApproxCholParams`, `pcg_maxits`, and `pcg_tol`.
 
 # Returns
 - A `Tulip.Model{Tv}` instance ready for optimization with the approximate Cholesky backend.
@@ -268,7 +273,8 @@ function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) w
   Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
 
   kustom_params = get(config, "kustom_parameters", Dict())
-  pcgtol = get(kustom_params, "pcgtol", 5e-8)
+  pcg_maxits = get(kustom_params, "pcg_maxits", 100)
+  pcg_tol = get(kustom_params, "pcg_tol", 5e-8)
   
   approxchol_params_dict = get(kustom_params, "ApproxCholParams", Dict())
   approxchol_type = Symbol(get(approxchol_params_dict, "type", "deg"))
@@ -277,18 +283,16 @@ function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) w
   approxchol_merge = get(approxchol_params_dict, "merge", 2)
   approxchol_params = ApproxCholParams(approxchol_type, approxchol_stag_test, approxchol_split, approxchol_merge)
 
-  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}(; params=approxchol_params, pcgtol=Tv(pcgtol)))
+  Tulip.set_parameter(lp, "KKT_Backend", Kustom.Backend{Tv}(; params=approxchol_params, pcg_maxits=pcg_maxits, pcg_tol=Tv(pcg_tol)))
+
+
 
   params = get(config, "parameters", Dict())
-  for (k, v) in params
-    Tulip.set_parameter(lp, k, v)
-  end
+  # Explicitly set parameters, ensuring correct types
+  Tulip.set_parameter(lp, "IPM_PRegMin", Tv(get(params, "IPM_PRegMin", 1e-4)))
+  Tulip.set_parameter(lp, "IPM_DRegMin", Tv(get(params, "IPM_DRegMin", 1e-8)))
+  Tulip.set_parameter(lp, "IPM_IterationsLimit", Int(get(params, "IPM_IterationsLimit", 200)))
 
-  se = Tv(sqrt(eps(Float64)))
-  Tulip.set_parameter(lp, "IPM_TolerancePFeas", se)
-  Tulip.set_parameter(lp, "IPM_ToleranceDFeas", se)
-  Tulip.set_parameter(lp, "IPM_ToleranceRGap", se)
-  Tulip.set_parameter(lp, "IPM_ToleranceIFeas", se)
   return lp
 end
 
@@ -331,8 +335,9 @@ function solve(netw::Dimacs.McfpNet, config::Dict)
   sddm_calls = TimerOutputs.ncalls(to["Main loop"]["Step"]["Newton"]["KKT"])
 
   residual_history = lp.solver.kkt.residual_history
+  pcg_iterations_history = lp.solver.kkt.pcg_iterations_history
 
-  return (; status, iters, seconds, solution, fact_s = fact_ns * 1e-9, solv_s = solv_ns * 1e-9, sddm_calls, residual_history)
+  return (; status, iters, seconds, solution, fact_s = fact_ns * 1e-9, solv_s = solv_ns * 1e-9, sddm_calls, residual_history, pcg_iterations_history)
 end
 
 end # module TulipApproxChol

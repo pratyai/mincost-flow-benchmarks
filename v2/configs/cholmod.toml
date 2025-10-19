@@ -3,6 +3,7 @@ solver = "tulip_cholmod"
 [parameters]
 IPM_PRegMin = 1e-6
 IPM_DRegMin = 1e-6
+IPM_IterationsLimit = 200
 
 [cholmod_parameters]
 NestedDissection = true

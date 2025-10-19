@@ -50,22 +50,23 @@ IPM_DRegMin = 1e-8
 IPM_IterationsLimit = 200
 
 [kustom_parameters]
-pcgtol = 5e-8
+pcg_maxits = 100
+pcg_tol = 5e-8
 
 [kustom_parameters.ApproxCholParams]
 type = "deg"
-p1 = 0
-p2 = 2
-p3 = 2
+stag_test = 0
+split = 2
+merge = 2
 ```
 
 ## Output Database
 
 The benchmark results are stored in a SQLite database file. The database contains three tables:
 
-*   `configs`: This table stores the unique solver configurations used for the runs.
+*   `configs`: This table stores the unique solver configurations used for the runs, including flattened parameters like `solver_name`, `ipm_preg_min`, `pcg_maxits`, etc. for easier querying.
 *   `runs`: This table stores the main results for each benchmark run, with a foreign key to the `configs` table.
-*   `solver_history`: This table stores the detailed history of the linear solver's residual norm for each iteration of the interior-point method, linked to the `runs` table.
+*   `solver_history`: This table stores the detailed history of the linear solver's residual norm and PCG iteration count for each iteration of the interior-point method, linked to the `runs` table.
 
 You can use any SQLite client to browse and analyze the results.
 
