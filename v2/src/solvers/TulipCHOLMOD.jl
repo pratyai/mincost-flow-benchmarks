@@ -1,6 +1,9 @@
 """
-This module defines a Tulip solver that uses a custom CHOLMOD-based KKT solver.
-This provides explicit control over the KKT system solution and is an example of how to integrate a custom KKT solver with Tulip.
+Module TulipCHOLMOD
+
+This module defines a Tulip solver that utilizes a custom KKT solver based on CHOLMOD.
+It provides explicit control over the KKT system solution, serving as an example
+of integrating a custom KKT solver with Tulip.jl for Minimum Cost Flow Problems (MCFP).
 """
 module TulipCHOLMOD
 
@@ -12,8 +15,11 @@ using Random
 using SuiteSparse
 
 """
-Custom KKT solver using CHOLMOD, adapted from Tulip.jl's internal implementation.
-This module defines a custom KKT backend that uses CHOLMOD to solve the normal equations system.
+Module CholmodKKT
+
+This submodule implements a custom KKT solver backend using CHOLMOD for solving
+the normal equations system within Tulip.jl's interior-point method. It's adapted
+from Tulip.jl's internal implementation to allow for specific CHOLMOD configurations.
 """
 module CholmodKKT
 
@@ -27,6 +33,10 @@ using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
 
 """
 Backend for the custom CHOLMOD KKT solver.
+
+# Fields
+- `nested_dissection::Bool`: If `true`, enables nested dissection ordering for CHOLMOD,
+  which can improve factorization performance for certain sparse matrix structures.
 """
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   nested_dissection::Bool = false
@@ -34,6 +44,23 @@ end
 
 """
 Solver for the custom CHOLMOD KKT solver.
+
+This mutable struct holds the problem data, workspace variables, CHOLMOD factorization
+object, and solution quality metrics for the KKT system.
+
+# Fields
+- `m::Ti`: Number of constraints.
+- `n::Ti`: Number of variables.
+- `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix.
+- `θ::Vector{Tv}`: Diagonal scaling vector.
+- `regP::Vector{Tv}`: Primal regularization vector.
+- `regD::Vector{Tv}`: Dual regularization vector.
+- `K::SparseMatrixCSC{Tv,Ti}`: The KKT matrix.
+- `ξ::Vector{Tv}`: Right-hand side vector of the KKT system.
+- `chol_factor::SuiteSparse.CHOLMOD.Factor{Tv}`: The CHOLMOD factorization object.
+- `ipm_iter::Int`: Current Interior Point Method iteration count.
+- `solve_in_iter::Int`: Counter for solves within the current IPM iteration.
+- `residual_history::Vector{Tuple{Int, Int, Tv}}`: History of residual norms.
 """
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
   # Problem data
@@ -63,7 +90,16 @@ Tulip.KKT.linear_system(::Solver) = "Normal equations (K1)"
 """
     Tulip.KKT.setup(A, ::K1, bk::Backend)
 
-Set up the KKT solver.
+Sets up the KKT solver for the CHOLMOD backend. This involves initializing
+the necessary data structures and performing a symbolic factorization using CHOLMOD.
+
+# Arguments
+- `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix of the optimization problem.
+- `::K1`: Indicates the K1 KKT system formulation.
+- `bk::Backend`: The backend configuration for the CHOLMOD solver.
+
+# Returns
+- A `Solver` instance initialized for the CHOLMOD KKT system.
 """
 function Tulip.KKT.setup(
   A::AbstractSparseMatrix{Tv,Ti},
@@ -88,7 +124,14 @@ end
 """
     Tulip.KKT.update!(kkt, θ, regP, regD)
 
-Update the KKT system with new scaling and regularization terms.
+Updates the KKT system with new scaling and regularization terms. This function
+reconstructs the KKT matrix and performs a numerical factorization using CHOLMOD.
+
+# Arguments
+- `kkt::Solver{Tv,Ti}`: The KKT solver instance to update.
+- `θ::AbstractVector{Tv}`: New diagonal scaling terms.
+- `regP::AbstractVector{Tv}`: New primal regularization terms.
+- `regD::AbstractVector{Tv}`: New dual regularization terms.
 """
 function Tulip.KKT.update!(
   kkt::Solver{Tv,Ti},
@@ -118,7 +161,14 @@ end
 """
     Tulip.KKT.solve!(dx, dy, kkt, ξp, ξd)
 
-Solve the KKT system.
+Solves the KKT system for `dx` and `dy` using the CHOLMOD factorization.
+
+# Arguments
+- `dx::AbstractVector{Tv}`: Output vector for primal step.
+- `dy::AbstractVector{Tv}`: Output vector for dual step.
+- `kkt::Solver{Tv,Ti}`: The KKT solver instance.
+- `ξp::AbstractVector{Tv}`: Primal right-hand side vector.
+- `ξd::AbstractVector{Tv}`: Dual right-hand side vector.
 """
 function Tulip.KKT.solve!(
   dx::AbstractVector{Tv},
@@ -153,6 +203,21 @@ end # module CholmodKKT
 include("common.jl")
 using .SolverCommon
 
+"""
+    construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict)
+
+Constructs a Tulip.jl model configured to use the CHOLMOD KKT solver.
+This function sets up the problem and applies solver-specific parameters from the configuration.
+
+# Arguments
+- `netw::Dimacs.McfpNet`: The DIMACS MCFP network data.
+- `Tv::Type`: The numeric type to use for the model (e.g., `Float64`).
+- `config::Dict`: A dictionary containing solver-specific configurations,
+  including `cholmod_parameters` for `nested_dissection`.
+
+# Returns
+- A `Tulip.Model{Tv}` instance ready for optimization with the CHOLMOD backend.
+"""
 function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) where {Tv<:Number}
   lp = SolverCommon.create_tulip_model(netw, Tv)
 
@@ -174,14 +239,22 @@ end
 """
     solve(netw::Dimacs.McfpNet, config::Dict)
 
-Solve a minimum cost flow problem using the TulipCHOLMOD solver with a given configuration.
+Solves a Minimum Cost Flow Problem (MCFP) using the TulipCHOLMOD solver.
+This function constructs the Tulip model, optimizes it, and returns detailed
+solver statistics.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The minimum cost flow problem to solve.
-- `config::Dict`: A dictionary with the solver configuration.
+- `config::Dict`: A dictionary with the solver configuration, including parameters
+  for CHOLMOD and general Tulip settings.
 
 # Returns
-- A named tuple with the solver status, number of iterations, solution time, and solution vector.
+- A named tuple containing:
+  - `status`: The termination status of the solver.
+  - `iters`: The number of Interior Point Method iterations.
+  - `seconds`: The total solution time in seconds.
+  - `solution`: The optimal solution vector `x`.
+  - `residual_history`: A history of residual norms during the optimization.
 """
 function solve(netw::Dimacs.McfpNet, config::Dict)
   lp = construct_tulip_model(netw, Float64, config)

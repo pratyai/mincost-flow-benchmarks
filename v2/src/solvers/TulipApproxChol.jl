@@ -1,5 +1,10 @@
 """
-This module defines a Tulip solver that uses a custom KKT solver with an approximate Cholesky factorization.
+Module TulipApproxChol
+
+This module defines a specialized Tulip solver that integrates a custom KKT solver
+utilizing an approximate Cholesky factorization from the Laplacians.jl library.
+It is designed for solving Minimum Cost Flow Problems (MCFP) with improved
+performance characteristics for certain graph structures.
 """
 module TulipApproxChol
 
@@ -14,9 +19,12 @@ using TimerOutputs
 include("common.jl")
 using .SolverCommon
 
-# Kustom.jl content adapted here
 """
-This module defines a custom KKT backend that uses an approximate Cholesky factorization from Laplacians.jl.
+Module Kustom
+
+This submodule defines a custom KKT (Karush-Kuhn-Tucker) backend for Tulip.jl
+that leverages an approximate Cholesky factorization provided by Laplacians.jl.
+It customizes the solution of the KKT system within the interior-point method.
 """
 module Kustom
 
@@ -24,6 +32,7 @@ using Tulip
 using Laplacians
 using SparseArrays
 using LinearAlgebra
+using ..SolverCommon
 
 using SparseArrays: AbstractSparseMatrix
 using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
@@ -31,6 +40,12 @@ using Laplacians: ApproxCholParams, approxchol_sddm
 
 """
 Backend for the custom approximate Cholesky KKT solver.
+
+# Fields
+- `params::ApproxCholParams`: Parameters for the approximate Cholesky factorization,
+  controlling aspects like ordering strategy, edge splitting, and merging.
+- `pcgtol::Tv`: Tolerance for the Preconditioned Conjugate Gradient (PCG) solver
+  used within the approximate Cholesky factorization.
 """
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
   params::ApproxCholParams = ApproxCholParams(:deg, 0, 2, 2)
@@ -39,6 +54,25 @@ end
 
 """
 Solver for the custom approximate Cholesky KKT solver.
+
+This mutable struct holds the problem data, Laplacians-related parameters,
+workspace variables, and solution quality metrics for the KKT system.
+
+# Fields
+- `m::Ti`: Number of constraints.
+- `n::Ti`: Number of variables.
+- `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix.
+- `params::ApproxCholParams`: Parameters for the approximate Cholesky factorization.
+- `pcgtol::Tv`: Tolerance for the PCG solver.
+- `θ::Vector{Tv}`: Diagonal scaling vector.
+- `regP::Vector{Tv}`: Primal regularization vector.
+- `regD::Vector{Tv}`: Dual regularization vector.
+- `K::SparseMatrixCSC{Tv,Ti}`: The KKT matrix.
+- `ξ::Vector{Tv}`: Right-hand side vector of the KKT system.
+- `sddm_solve::Function`: Function to solve the SDDM system, yielding `dy`.
+- `ipm_iter::Int`: Current Interior Point Method iteration count.
+- `solve_in_iter::Int`: Counter for solves within the current IPM iteration.
+- `residual_history::Vector{Tuple{Int, Int, Tv}}`: History of residual norms.
 """
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
   # Problem data
@@ -70,7 +104,16 @@ Tulip.KKT.linear_system(::Solver) = "Normal equations (K1)"
 """
     Tulip.KKT.setup(A, ::K1, bk::Backend)
 
-Set up the KKT solver.
+Sets up the KKT solver for the approximate Cholesky backend. This involves initializing
+the necessary data structures and pre-factorizing the KKT matrix symbolically.
+
+# Arguments
+- `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix of the optimization problem.
+- `::K1`: Indicates the K1 KKT system formulation.
+- `bk::Backend`: The backend configuration for the approximate Cholesky solver.
+
+# Returns
+- A `Solver` instance initialized for the approximate Cholesky KKT system.
 """
 function Tulip.KKT.setup(
   A::AbstractSparseMatrix{Tv,Ti},
@@ -94,7 +137,14 @@ end
 """
     Tulip.KKT.update!(kkt, θ, regP, regD)
 
-Update the KKT system with new scaling and regularization terms.
+Updates the KKT system with new scaling and regularization terms. This function
+reconstructs the KKT matrix and re-initializes the SDDM solver with the updated terms.
+
+# Arguments
+- `kkt::Solver{Tv,Ti}`: The KKT solver instance to update.
+- `θ::AbstractVector{Tv}`: New diagonal scaling terms.
+- `regP::AbstractVector{Tv}`: New primal regularization terms.
+- `regD::AbstractVector{Tv}`: New dual regularization terms.
 """
 function Tulip.KKT.update!(
   kkt::Solver{Tv,Ti},
@@ -132,7 +182,14 @@ end
 """
     Tulip.KKT.solve!(dx, dy, kkt, ξp, ξd)
 
-Solve the KKT system.
+Solves the KKT system for `dx` and `dy` using the approximate Cholesky factorization.
+
+# Arguments
+- `dx::AbstractVector{Tv}`: Output vector for primal step.
+- `dy::AbstractVector{Tv}`: Output vector for dual step.
+- `kkt::Solver{Tv,Ti}`: The KKT solver instance.
+- `ξp::AbstractVector{Tv}`: Primal right-hand side vector.
+- `ξd::AbstractVector{Tv}`: Dual right-hand side vector.
 """
 function Tulip.KKT.solve!(
   dx::AbstractVector{Tv},
@@ -162,12 +219,6 @@ function Tulip.KKT.solve!(
   return nothing
 end
 
-"""
-    update_solver_status!(hsd, ϵp, ϵd, ϵg, ϵi)
-
-Custom implementation of the solver status update function.
-This is likely a copy of an older version of Tulip's function or a custom version with different convergence criteria.
-"""
 function Tulip.update_solver_status!(
   hsd::Tulip.HSD{T},
   ϵp::T,
@@ -175,43 +226,40 @@ function Tulip.update_solver_status!(
   ϵg::T,
   ϵi::T,
 ) where {T}
-  hsd.solver_status = Tulip.Trm_Unknown
+"""
+    Tulip.update_solver_status!(hsd, ϵp, ϵd, ϵg, ϵi)
 
-  pt, res = hsd.pt, hsd.res
-  dat = hsd.dat
+Extends Tulip's default solver status update function to use a simplified
+convergence criteria for the approximate Cholesky solver. This function
+dispatches to `SolverCommon._approxchol_update_solver_status!`.
 
-  ρp = max(
-    res.rp_nrm / (pt.τ * (one(T) + norm(dat.b, Inf))),
-    res.rl_nrm / (pt.τ * (one(T) + norm(dat.l .* dat.lflag, Inf))),
-    res.ru_nrm / (pt.τ * (one(T) + norm(dat.u .* dat.uflag, Inf))),
-  )
-  ρd = res.rd_nrm / (pt.τ * (one(T) + norm(dat.c, Inf)))
-  ρg = abs(hsd.primal_objective - hsd.dual_objective) / (one(T) + abs(hsd.dual_objective))
-
-  if ρp <= ϵp
-    hsd.primal_status = Tulip.Sln_FeasiblePoint
-  else
-    hsd.primal_status = Tulip.Sln_Unknown
-  end
-
-  if ρd <= ϵd
-    hsd.dual_status = Tulip.Sln_FeasiblePoint
-  else
-    hsd.dual_status = Tulip.Sln_Unknown
-  end
-
-  if ρp <= ϵp && ρd <= ϵd && ρg <= ϵg
-    hsd.primal_status = Tulip.Sln_Optimal
-    hsd.dual_status = Tulip.Sln_Optimal
-    hsd.solver_status = Tulip.Trm_Optimal
-    return nothing
-  end
-
-  return nothing
+# Arguments
+- `hsd::Tulip.HSD{T}`: The Homogeneous Self-Dual (HSD) solver object.
+- `ϵp::T`: Primal feasibility tolerance.
+- `ϵd::T`: Dual feasibility tolerance.
+- `ϵg::T`: Duality gap tolerance.
+- `ϵi::T`: Infeasibility tolerance.
+"""
+  SolverCommon._approxchol_update_solver_status!(hsd, ϵp, ϵd, ϵg, ϵi)
 end
 
 end # module Kustom
 
+"""
+    construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict)
+
+Constructs a Tulip.jl model configured to use the approximate Cholesky KKT solver.
+This function sets up the problem and applies solver-specific parameters from the configuration.
+
+# Arguments
+- `netw::Dimacs.McfpNet`: The DIMACS MCFP network data.
+- `Tv::Type`: The numeric type to use for the model (e.g., `Float64`).
+- `config::Dict`: A dictionary containing solver-specific configurations,
+  including `kustom_parameters` for `ApproxCholParams` and `pcgtol`.
+
+# Returns
+- A `Tulip.Model{Tv}` instance ready for optimization with the approximate Cholesky backend.
+"""
 function construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict) where {Tv<:Number}
   lp = SolverCommon.create_tulip_model(netw, Tv)
 
@@ -247,14 +295,25 @@ end
 """
     solve(netw::Dimacs.McfpNet, config::Dict)
 
-Solve a minimum cost flow problem using the TulipApproxChol solver.
+Solves a Minimum Cost Flow Problem (MCFP) using the TulipApproxChol solver.
+This function constructs the Tulip model, optimizes it, and returns detailed
+solver statistics.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The minimum cost flow problem to solve.
-- `config::Dict`: A dictionary with the solver configuration.
+- `config::Dict`: A dictionary with the solver configuration, including parameters
+  for the approximate Cholesky factorization and general Tulip settings.
 
 # Returns
-- A named tuple with the solver status, number of iterations, solution time, solution vector, and additional solver-specific statistics.
+- A named tuple containing:
+  - `status`: The termination status of the solver.
+  - `iters`: The number of Interior Point Method iterations.
+  - `seconds`: The total solution time in seconds.
+  - `solution`: The optimal solution vector `x`.
+  - `fact_s`: Factorization time in seconds.
+  - `solv_s`: KKT system solve time in seconds.
+  - `sddm_calls`: Number of SDDM solver calls.
+  - `residual_history`: A history of residual norms during the optimization.
 """
 function solve(netw::Dimacs.McfpNet, config::Dict)
   lp = construct_tulip_model(netw, Float64, config)
