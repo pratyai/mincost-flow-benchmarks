@@ -13,6 +13,22 @@ This project provides a benchmarking suite for minimum cost flow solvers in Juli
     Pkg.instantiate()
     ```
 
+## Code Formatting
+
+To format the Julia code in this project, you can use `JuliaFormatter.jl`.
+
+1.  **Add JuliaFormatter to the project (if not already added):**
+
+    ```bash
+    julia --project=. -e 'using Pkg; Pkg.add("JuliaFormatter")'
+    ```
+
+2.  **Run the formatter:**
+
+    ```bash
+    julia --project=. -e 'using JuliaFormatter; format(".")'
+    ```
+
 ## Usage
 
 The main entry point for running benchmarks is `src/main.jl`. It takes the following command-line arguments:
@@ -65,7 +81,8 @@ merge = 2
 The benchmark results are stored in a SQLite database file. The database contains three tables:
 
 *   `configs`: This table stores the unique solver configurations used for the runs, including flattened parameters like `solver_name`, `ipm_preg_min`, `pcg_maxits`, etc. for easier querying.
-*   `runs`: This table stores the main results for each benchmark run, with a foreign key to the `configs` table.
+*   `runs`: This table stores the main results for each benchmark run, with foreign keys to the `configs` and `problems` tables.
+*   `problems`: This table stores details about each problem instance, including its name, input file path, and size.
 *   `solver_history`: This table stores the detailed history of the linear solver's residual norm and PCG iteration count for each iteration of the interior-point method, linked to the `runs` table.
 
 You can use any SQLite client to browse and analyze the results.
@@ -83,3 +100,15 @@ You can use any SQLite client to browse and analyze the results.
     ```bash
     julia --project=. src/main.jl -i data/specs/warmup.inspec --configs configs/cholmod.toml configs/approxchol.toml
     ```
+
+---
+
+## Generating Problem Instances
+
+To generate the grid problem instances used for benchmarking, run the following script:
+
+```bash
+julia --project=. scripts/generate_grid_problems.jl
+```
+
+This script will create `.min.gz` and `.min` files in the `data/problems/unifwidegrid/` directory and update the `data/specs/unifwidegrid.inspec` file with the generated problems.

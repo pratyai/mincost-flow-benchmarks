@@ -32,7 +32,13 @@ ensuring the generated problem is feasible, as per `ggraph1.f`.
 # Returns
 - A `Dimacs.McfpNet` object representing the generated grid graph MCFP instance.
 """
-function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, rng::AbstractRNG)
+function generate_grid_graph_mcfp(
+    h::Int,
+    w::Int,
+    max_cap::Int,
+    max_cost::Int,
+    rng::AbstractRNG,
+)
     num_grid_nodes = h * w
     s_node = num_grid_nodes + 1
     t_node = num_grid_nodes + 2
@@ -41,7 +47,7 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
     # Map 1-based (row, col) to a 1-based linear node index for grid nodes
     node_idx(r, c) = (r - 1) * w + c
 
-    dimacs_directed_edges = Vector{Tuple{Int, Int}}()
+    dimacs_directed_edges = Vector{Tuple{Int,Int}}()
     arc_capacities = Vector{Int}()
     arc_costs = Vector{Int}()
 
@@ -53,8 +59,8 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
     costt = zeros(Int, h) # For (r,w) -> t arcs
 
     # --- Grid Arcs (Rightwards and Downwards) ---
-    for r in 1:h
-        for c in 1:w
+    for r = 1:h
+        for c = 1:w
             u_idx = node_idx(r, c)
 
             # Arc to the right: (r, c) -> (r, c+1)
@@ -109,7 +115,7 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
 
     # --- Source Arcs (s_node to first column grid nodes) ---
     # Capacities and costs are derived from accumulated grid arc properties in ggraph1.f
-    for r in 1:h
+    for r = 1:h
         grid_node = node_idx(r, 1)
         push!(dimacs_directed_edges, (s_node, grid_node))
         push!(arc_capacities, caps[r])
@@ -122,7 +128,7 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
 
     # --- Sink Arcs (last column grid nodes to t_node) ---
     # Capacities and costs are derived from accumulated grid arc properties in ggraph1.f
-    for r in 1:h
+    for r = 1:h
         grid_node = node_idx(r, w)
         push!(dimacs_directed_edges, (grid_node, t_node))
         push!(arc_capacities, capt[r])
@@ -138,15 +144,15 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
     # Each entry in adj[u] is a tuple (v, capacity_idx, reverse_capacity_idx)
     # capacity_idx is the index in the `residual_cap` array for u->v
     # reverse_capacity_idx is the index in the `residual_cap` array for v->u
-    
+
     # First, create a mapping from (u,v) to its index in dimacs_directed_edges
-    arc_to_idx = Dict{Tuple{Int, Int}, Int}()
+    arc_to_idx = Dict{Tuple{Int,Int},Int}()
     for (i, (u, v)) in enumerate(dimacs_directed_edges)
         arc_to_idx[(u, v)] = i
     end
 
     # Now build the adjacency list for the max-flow algorithm
-    max_flow_adj = [Vector{Tuple{Int, Int, Int}}() for _ in 1:total_nodes]
+    max_flow_adj = [Vector{Tuple{Int,Int,Int}}() for _ = 1:total_nodes]
     for (i, (u, v)) in enumerate(dimacs_directed_edges)
         # For arc u -> v (index i)
         # Find its reverse arc v -> u
@@ -209,7 +215,7 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
             # Need to find the corresponding entry in max_flow_adj[v] for (u, reverse_cap_idx, cap_idx)
             # A more direct way is to store the reverse_capacity_idx directly in the forward arc's entry
             # Let's assume max_flow_adj[u] stores (v, cap_idx, rev_cap_idx)
-            
+
             # Find the rev_cap_idx for the current cap_idx
             rev_cap_idx = -1
             for (neighbor, c_idx, r_idx) in max_flow_adj[u]
@@ -239,7 +245,12 @@ function generate_grid_graph_mcfp(h::Int, w::Int, max_cap::Int, max_cost::Int, r
     end
     G = Dimacs.FromEdgeList(total_nodes, E_matrix)
 
-    return Dimacs.McfpNet(G=G, Demand=node_demands, Cap=arc_capacities, Cost=arc_costs)
+    return Dimacs.McfpNet(
+        G = G,
+        Demand = node_demands,
+        Cap = arc_capacities,
+        Cost = arc_costs,
+    )
 end
 
 end # module GridGraphs

@@ -9,7 +9,7 @@ using .GridGraphs
 
 # --- Configuration ---
 h_fixed = 5
-w_values = 5:5:20 # w from 5 to 20, step 5
+w_values = round.(Int, 10 .^ (range(log10(5), stop = log10(1_000_000), length = 20)))
 max_cap = 100
 max_cost = 10
 
@@ -49,7 +49,10 @@ for w in w_values
     end
 
     file_bytes = filesize(output_file_path_gz)
-    push!(spec_lines, "$(problem_name),data/problems/unifwidegrid/$(problem_name).min.gz,$(file_bytes)")
+    push!(
+        spec_lines,
+        "$(problem_name),data/problems/unifwidegrid/$(problem_name).min.gz,$(file_bytes)",
+    )
 end
 
 # Write the spec file
