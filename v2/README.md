@@ -33,10 +33,36 @@ To format the Julia code in this project, you can use `JuliaFormatter.jl`.
 
 The main entry point for running benchmarks is `src/main.jl`. It takes the following command-line arguments:
 
-*   `-i <path>`: **(Required)** Path to the input spec file. The spec file is a CSV file that lists the problem instances to run. See `data/specs/warmup.inspec` for an example.
+*   `-i <path...>`: **(Required)** Paths to one or more input spec files. The spec file is a CSV file that lists the problem instances to run. See `data/specs/warmup.inspec` for an example.
 *   `--configs <path...>`: **(Required)** Paths to one or more solver configuration files. See the "Solver Configuration" section below for details.
-*   `-o <path>`: (Optional) Path to store the output SQLite database file. Defaults to `benchmarks.db`. If the file already exists, new results will be appended.
+*   `-o <path>`: (Optional) Path to store the output SQLite database file. If left empty, the Julia script will automatically name the database `spec_name.db` for each input spec file.
 *   `-s <path>`: (Optional) Path to a directory where solution flow vectors will be stored (in JLD2 format).
+
+## Graphical User Interface (GUI)
+
+A Python-based GUI is available to simplify running benchmarks. This GUI allows you to select input spec files and solver configuration files using file dialogs, and then executes the Julia benchmark script.
+
+### GUI Installation
+
+1.  **Install Python:** If you don't have Python installed, download it from [python.org](https://www.python.org/downloads/).
+2.  **Install PyQt5:**
+    ```bash
+    pip install PyQt5
+    ```
+    Ensure Julia is installed and the `julia` command is in your system's PATH.
+
+### GUI Usage
+
+To run the GUI:
+
+```bash
+python src/gui.py
+```
+
+*   **Input Spec Files (-i):** Use the "Add Input Spec" button to add one or more input spec files.
+*   **Output Database Path (-o):** Specify the path for the output SQLite database. If left empty, the Julia script will automatically name the database `spec_name.db` for each input spec file.
+*   **Solution Directory (-s):** Specify a directory to save solution flow vectors.
+*   **Config Files (--configs):** Use the "Add Config" button to add one or more solver configuration files.
 
 ## Solver Configuration
 
