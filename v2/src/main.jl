@@ -171,7 +171,7 @@ function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::Strin
         end
 
         match_obj_time = match(
-            r"Run NetworkSimplex: u: [^,]+, s: [^,]+, cu: [^,]+, cs: [^,]+, real: ([-+]?\d*\.?\d+)s",
+            r"Run NetworkSimplex: u: [^,]+, s: [^,]+, cu: [^,]+, cs: [^,]+, real: ([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)s",
             stderr_output,
         )
         if match_obj_time !== nothing

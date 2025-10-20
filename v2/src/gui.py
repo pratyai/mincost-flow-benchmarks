@@ -1,6 +1,8 @@
 import sys
 import os
 import subprocess
+import csv
+import tempfile
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -44,6 +46,8 @@ class MinCostFlowGUI(QWidget):
 
         self.last_config_dir = os.getcwd()
 
+        self.problem_selections = {}
+
         self.init_ui()
         self._load_default_input_specs()  # Load default input specs after UI is initialized
         self._load_default_configs()  # Load default configs after UI is initialized
@@ -76,28 +80,19 @@ class MinCostFlowGUI(QWidget):
 
         main_layout.addLayout(input_spec_layout)
 
-        # Output Database Path
-        output_db_h_layout = QHBoxLayout()
-        output_db_label = QLabel("Output Database Path (-o):")
-        self.output_db_line_edit = QLineEdit()
-        self.output_db_line_edit.setPlaceholderText(
-            "Leave empty to use spec_name.db for each spec"
-        )
-        output_db_browse_button = QPushButton("Browse")
-        output_db_browse_button.clicked.connect(
-            lambda: self.browse_file(self.output_db_line_edit)
-        )
+        # Problems List (for selected spec file)
+        problems_layout = QVBoxLayout()
+        problems_label = QLabel("Problems in selected spec file:")
+        problems_layout.addWidget(problems_label)
 
-        output_db_h_layout.addWidget(output_db_label)
-        output_db_h_layout.addWidget(self.output_db_line_edit)
-        output_db_h_layout.addWidget(output_db_browse_button)
-        main_layout.addLayout(output_db_h_layout)
-
-        # Solution Directory
-        self.solution_dir_edit = self._create_input_row(
-            "Solution Directory (-s):", self.browse_directory
+        self.problems_list_widget = QListWidget()
+        problems_layout.addWidget(self.problems_list_widget)
+        self.input_spec_list_widget.itemSelectionChanged.connect(
+            self.update_problems_list
         )
-        main_layout.addLayout(self.solution_dir_edit)
+        self.problems_list_widget.itemChanged.connect(self.on_problem_selection_changed)
+
+        main_layout.addLayout(problems_layout)
 
         # Config Files (List Widget)
         config_layout = QVBoxLayout()
@@ -124,6 +119,31 @@ class MinCostFlowGUI(QWidget):
 
         main_layout.addLayout(config_layout)
 
+        # Output Database Path
+        output_db_h_layout = QHBoxLayout()
+        output_db_label = QLabel("Output Database Path (-o):")
+        self.output_db_line_edit = QLineEdit()
+        self.output_db_line_edit.setPlaceholderText(
+            "Leave empty to use spec_name.db for each spec"
+        )
+        output_db_browse_button = QPushButton("Browse")
+        output_db_browse_button.clicked.connect(
+            lambda: self.browse_file(self.output_db_line_edit)
+        )
+
+        output_db_h_layout.addWidget(output_db_label)
+        output_db_h_layout.addWidget(self.output_db_line_edit)
+        output_db_h_layout.addWidget(output_db_browse_button)
+        main_layout.addLayout(output_db_h_layout)
+
+        # Solution Directory
+        self.solution_dir_edit = self._create_input_row(
+            "Solution Directory (-s):",
+            self.browse_directory,
+            placeholder_text="Leave empty to not generate solution files",
+        )
+        main_layout.addLayout(self.solution_dir_edit)
+
         # Run and Cancel Buttons
         button_layout = QHBoxLayout()
         self.run_button = QPushButton("Run Benchmarks")
@@ -137,10 +157,14 @@ class MinCostFlowGUI(QWidget):
 
         self.setLayout(main_layout)
 
-    def _create_input_row(self, label_text, browse_func, button_text="Browse"):
+    def _create_input_row(
+        self, label_text, browse_func, button_text="Browse", placeholder_text=None
+    ):
         h_layout = QHBoxLayout()
         label = QLabel(label_text)
         line_edit = QLineEdit()
+        if placeholder_text:
+            line_edit.setPlaceholderText(placeholder_text)
         browse_button = QPushButton(button_text)
         browse_button.clicked.connect(lambda: browse_func(line_edit))
 
@@ -232,6 +256,73 @@ class MinCostFlowGUI(QWidget):
     def clear_all_configs(self):
         self.config_list_widget.clear()
 
+    def update_problems_list(self):
+        selected_items = self.input_spec_list_widget.selectedItems()
+
+        try:
+            self.problems_list_widget.itemChanged.disconnect(
+                self.on_problem_selection_changed
+            )
+        except TypeError:  # Was not connected
+            pass
+
+        self.problems_list_widget.clear()
+
+        if not selected_items:
+            return
+
+        # For simplicity, only handle single selection
+        selected_spec_file = selected_items[0].text()
+
+        try:
+            with open(selected_spec_file, "r", newline="") as f:
+                reader = csv.reader(f)
+                header = next(reader)  # Skip header
+
+                # Assuming 'name' is the first column
+                for i, row in enumerate(reader):
+                    if not row:
+                        continue
+                    problem_name = row[0]
+                    item = QListWidgetItem(problem_name)
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+
+                    # Check if we have a stored selection state
+                    if selected_spec_file in self.problem_selections:
+                        if i in self.problem_selections[selected_spec_file]:
+                            item.setCheckState(Qt.Checked)
+                        else:
+                            item.setCheckState(Qt.Unchecked)
+                    else:
+                        item.setCheckState(Qt.Checked)  # Default to checked
+
+                    self.problems_list_widget.addItem(item)
+        except Exception as e:
+            # Handle file reading errors, etc.
+            print(f"Error reading spec file: {e}")
+        finally:
+            self.problems_list_widget.itemChanged.connect(
+                self.on_problem_selection_changed
+            )
+
+    def on_problem_selection_changed(self, item):
+        selected_spec_items = self.input_spec_list_widget.selectedItems()
+        if not selected_spec_items:
+            return
+
+        selected_spec_file = selected_spec_items[0].text()
+
+        if selected_spec_file not in self.problem_selections:
+            # Initialize with all problems selected
+            all_rows = set(range(self.problems_list_widget.count()))
+            self.problem_selections[selected_spec_file] = all_rows
+
+        row = self.problems_list_widget.row(item)
+        if item.checkState() == Qt.Checked:
+            self.problem_selections[selected_spec_file].add(row)
+        else:
+            self.problem_selections[selected_spec_file].discard(row)
+
     def run_benchmarks(self):
         julia_command = [
             "julia",
@@ -245,6 +336,39 @@ class MinCostFlowGUI(QWidget):
             for i in range(self.input_spec_list_widget.count())
         ]
 
+        temp_files_to_cleanup = []
+        processed_input_specs = []
+
+        for spec_file in input_specs:
+            if spec_file in self.problem_selections:
+                try:
+                    with open(spec_file, "r", newline="") as f_in:
+                        reader = csv.reader(f_in)
+                        header = next(reader)
+                        all_rows = list(reader)
+
+                    selected_rows_indices = self.problem_selections[spec_file]
+
+                    # Create a temp file
+                    temp_fd, temp_path = tempfile.mkstemp(suffix=".inspec", text=True)
+                    temp_files_to_cleanup.append(temp_path)
+
+                    with os.fdopen(temp_fd, "w", newline="") as f_out:
+                        writer = csv.writer(f_out)
+                        writer.writerow(header)
+                        for i, row in enumerate(all_rows):
+                            if i in selected_rows_indices:
+                                writer.writerow(row)
+
+                    processed_input_specs.append(temp_path)
+
+                except Exception as e:
+                    print(f"Error processing spec file {spec_file}: {e}")
+                    # Fallback to original file on error
+                    processed_input_specs.append(spec_file)
+            else:
+                processed_input_specs.append(spec_file)
+
         output_db = (
             self.output_db_line_edit.text()
         )  # Get text from the specific QLineEdit
@@ -256,8 +380,8 @@ class MinCostFlowGUI(QWidget):
             for i in range(self.config_list_widget.count())
         ]
 
-        if input_specs:
-            for input_spec_file in input_specs:
+        if processed_input_specs:
+            for input_spec_file in processed_input_specs:
                 if input_spec_file.strip():
                     julia_command.extend(["-i", input_spec_file.strip()])
         # Only add -o if the field is not empty
@@ -313,6 +437,13 @@ class MinCostFlowGUI(QWidget):
             print(
                 "Error: 'julia' command not found. Is Julia installed and in your PATH?"
             )
+        finally:
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    os.remove(temp_file)
+                    print(f"Cleaned up temp file: {temp_file}")
+                except OSError as e:
+                    print(f"Error cleaning up temp file {temp_file}: {e}")
 
 
 if __name__ == "__main__":

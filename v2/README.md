@@ -108,7 +108,7 @@ The benchmark results are stored in a SQLite database file. The database contain
 
 *   `configs`: This table stores the unique solver configurations used for the runs, including flattened parameters like `solver_name`, `ipm_preg_min`, `pcg_maxits`, etc. for easier querying.
 *   `runs`: This table stores the main results for each benchmark run, with foreign keys to the `configs` and `problems` tables.
-*   `problems`: This table stores details about each problem instance, including its name, input file path, and size.
+*   `problems`: This table stores details about each problem instance, including its name, input file path, size, true optimal value, and the time taken by the Lemon solver to find it.
 *   `solver_history`: This table stores the detailed history of the linear solver's residual norm and PCG iteration count for each iteration of the interior-point method, linked to the `runs` table.
 
 You can use any SQLite client to browse and analyze the results.
