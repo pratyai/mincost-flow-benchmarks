@@ -3,6 +3,7 @@ import os
 import subprocess
 import csv
 import tempfile
+import shutil
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -33,6 +34,7 @@ DEFAULT_CONFIG_DIR_RELATIVE = os.path.join(
 class MinCostFlowGUI(QWidget):
     def __init__(self):
         super().__init__()
+        self.run_command_on_exit = False
         self.setWindowTitle("MinCostFlow Benchmarks GUI")
         self.setGeometry(100, 100, 700, 500)  # Adjusted height for two list widgets
 
@@ -336,8 +338,9 @@ class MinCostFlowGUI(QWidget):
             for i in range(self.input_spec_list_widget.count())
         ]
 
-        temp_files_to_cleanup = []
         processed_input_specs = []
+        temp_dir = tempfile.mkdtemp()
+        self.temp_dir_to_cleanup = temp_dir
 
         for spec_file in input_specs:
             if spec_file in self.problem_selections:
@@ -349,11 +352,10 @@ class MinCostFlowGUI(QWidget):
 
                     selected_rows_indices = self.problem_selections[spec_file]
 
-                    # Create a temp file
-                    temp_fd, temp_path = tempfile.mkstemp(suffix=".inspec", text=True)
-                    temp_files_to_cleanup.append(temp_path)
+                    base_name = os.path.basename(spec_file)
+                    temp_path = os.path.join(temp_dir, base_name)
 
-                    with os.fdopen(temp_fd, "w", newline="") as f_out:
+                    with open(temp_path, "w", newline="") as f_out:
                         writer = csv.writer(f_out)
                         writer.writerow(header)
                         for i, row in enumerate(all_rows):
@@ -394,60 +396,62 @@ class MinCostFlowGUI(QWidget):
                 if config_file.strip():
                     julia_command.extend(["--configs", config_file.strip()])
 
-        print("Executing Julia command:", " ".join(julia_command))
-        try:
-            result = subprocess.run(
-                julia_command,
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=JULIA_PROJECT_PATH,
-            )
-            QMessageBox.information(
-                self,
-                "Success",
-                "Julia command executed successfully!\n\nStdout:\n"
-                + result.stdout
-                + "\nStderr:\n"
-                + result.stderr,
-            )
-            print("Julia Stdout:\n", result.stdout)
-            print("Julia Stderr:\n", result.stderr)
-        except subprocess.CalledProcessError as e:
-            QMessageBox.critical(
-                self,
-                "Error",
-                "Julia command failed!\n\nReturn Code: "
-                + str(e.returncode)
-                + "\nStdout:\n"
-                + e.stdout
-                + "\nStderr:\n"
-                + e.stderr,
-            )
-            print("Julia command failed!")
-            print("Return Code:", e.returncode)
-            print("Stdout:\n", e.stdout)
-            print("Stderr:\n", e.stderr)
-        except FileNotFoundError:
-            QMessageBox.critical(
-                self,
-                "Error",
-                "'julia' command not found. Is Julia installed and in your PATH?",
-            )
-            print(
-                "Error: 'julia' command not found. Is Julia installed and in your PATH?"
-            )
-        finally:
-            for temp_file in temp_files_to_cleanup:
-                try:
-                    os.remove(temp_file)
-                    print(f"Cleaned up temp file: {temp_file}")
-                except OSError as e:
-                    print(f"Error cleaning up temp file {temp_file}: {e}")
+        self.run_command_on_exit = True
+        self.julia_command = julia_command
+
+        self.close()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = MinCostFlowGUI()
     gui.show()
-    sys.exit(app.exec_())
+    app.exec_()
+
+    if not getattr(gui, "run_command_on_exit", False):
+        sys.exit(0)
+
+    julia_command = gui.julia_command
+    return_code = 0
+
+    print("Executing Julia command:", " ".join(julia_command))
+    try:
+        process = subprocess.Popen(
+            julia_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=JULIA_PROJECT_PATH,
+            bufsize=1,
+        )
+
+        if process.stdout:
+            for line in iter(process.stdout.readline, ""):
+                print(line, end="")
+            process.stdout.close()
+
+        process.wait()
+        return_code = process.returncode
+
+        if return_code == 0:
+            print("\nJulia command executed successfully!")
+        else:
+            print(f"\nJulia command failed with return code: {return_code}")
+
+    except FileNotFoundError:
+        print("Error: 'julia' command not found. Is Julia installed and in your PATH?")
+        return_code = 1
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return_code = 1
+    finally:
+        if hasattr(gui, "temp_dir_to_cleanup"):
+            try:
+                shutil.rmtree(gui.temp_dir_to_cleanup)
+                print(f"Cleaned up temp directory: {gui.temp_dir_to_cleanup}")
+            except OSError as e:
+                print(
+                    f"Error cleaning up temp directory {gui.temp_dir_to_cleanup}: {e}"
+                )
+
+    sys.exit(return_code)
