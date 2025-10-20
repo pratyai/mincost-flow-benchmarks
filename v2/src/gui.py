@@ -394,7 +394,7 @@ class MinCostFlowGUI(QWidget):
         if configs:
             for config_file in configs:
                 if config_file.strip():
-                    julia_command.extend(["--configs", config_file.strip()])
+                    julia_command.extend(["-c", config_file.strip()])
 
         self.run_command_on_exit = True
         self.julia_command = julia_command

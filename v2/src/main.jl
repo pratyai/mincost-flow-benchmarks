@@ -1,4 +1,4 @@
-"""
+#=
     main.jl
 
 This script serves as the main entry point for running the MinCostFlowBenchmarksV2.jl
@@ -11,7 +11,7 @@ The script supports:
 - Storing benchmark results in an SQLite database.
 - Optionally saving solution flow vectors.
 - Automatically calculating true optimal values using an external DIMACS solver.
-"""
+=#
 using ArgParse
 using CSV
 using DataFrames
@@ -52,7 +52,8 @@ function parse_cmdargs()
         "-i"
         help = "input spec file(s)"
         arg_type = String
-        nargs = '+' # Allow multiple input spec files
+        action = :append_arg
+        default = String[]
         required = true
         "-o"
         help = "path to store the output database (if absent, will use spec_name.db for each spec)"
@@ -66,7 +67,8 @@ function parse_cmdargs()
         "-c"
         help = "paths to solver config files"
         arg_type = String
-        nargs = '+'
+        action = :append_arg
+        default = String[]
         required = true
     end
     return parse_args(s)
@@ -265,15 +267,14 @@ function process_single_spec(
 )
     local probspec = CSV.read(input_spec_file, DataFrame)
 
-    # Setup database
     db = SQLite.DB(output_db_path)
-    # Populate problems table
     problem_ids = Dict{String,Int}()
     dimacs_solver_path = "/Users/pmz/Downloads/lemon-1.3.1/build/tools/dimacs-solver"
 
+    # --- Pass 1: Populate problems table and get problem_ids ---
     for r in eachrow(probspec)
         local indimacs::String = joinpath(dirname(Base.@__DIR__), r[:input_file])
-        local netw = Dimacs.ReadDimacs(indimacs)
+        local netw = Dimacs.ReadDimacs(indimacs) # Parse to get num_vertices, num_edges
         local num_vertices = netw.G.n
         local num_edges = netw.G.m
 
@@ -292,9 +293,6 @@ function process_single_spec(
             existing_lemon_time_s = row.lemon_time_s
         end
 
-        local true_optimal::Union{Float64,Missing} = missing
-        local lemon_time_s::Union{Float64,Missing} = missing
-
         if ismissing(problem_id)
             DBInterface.execute(
                 db,
@@ -312,7 +310,6 @@ function process_single_spec(
             problem_id = SQLite.last_insert_rowid(db)
         end
 
-        # Always try to get true optimal value and lemon time, and update if missing
         if ismissing(existing_true_optimal) || ismissing(existing_lemon_time_s)
             (true_optimal, lemon_time_s) =
                 get_true_optimal_value(dimacs_solver_path, indimacs)
@@ -322,8 +319,6 @@ function process_single_spec(
                 (true_optimal, lemon_time_s, problem_id),
             )
         else
-            true_optimal = existing_true_optimal
-            lemon_time_s = existing_lemon_time_s
             println(
                 "  True optimal value and lemon solver time for `",
                 r[:name],
@@ -333,7 +328,7 @@ function process_single_spec(
         problem_ids[r[:name]] = problem_id
     end
 
-    # Store parsed configs for later use
+    # --- Pass 2: Parse configs and get config_ids ---
     parsed_configs = []
     for config_file in config_files
         config_text = read(config_file, String)
@@ -429,11 +424,32 @@ function process_single_spec(
         )
     end
 
+    # --- Pass 3: Run benchmarks, skipping problems if all runs exist ---
     for r in eachrow(probspec)
-        println("Processing problem: ", r[:name])
-        local indimacs::String = joinpath(dirname(Base.@__DIR__), r[:input_file])
-        local netw = Dimacs.ReadDimacs(indimacs)
         local current_problem_id = problem_ids[r[:name]]
+        local indimacs::String = joinpath(dirname(Base.@__DIR__), r[:input_file])
+
+        # Check if all runs for this problem already exist
+        should_skip_problem = true
+        for parsed_config in parsed_configs
+            query = DBInterface.execute(
+                db,
+                "SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
+                (r[:name], parsed_config.config_id, current_problem_id),
+            )
+            if isempty(query)
+                should_skip_problem = false
+                break # Found at least one missing run, so don't skip this problem
+            end
+        end
+
+        if should_skip_problem
+            println("Skipping problem `", r[:name], "` as all runs already exist.")
+            continue # Skip to the next problem
+        end
+
+        println("Processing problem: ", r[:name])
+        local netw = Dimacs.ReadDimacs(indimacs) # Parse only if not skipped
 
         for parsed_config in parsed_configs
             config_file = parsed_config.config_file
@@ -444,7 +460,7 @@ function process_single_spec(
 
             println("  with config: ", config_file)
 
-            # Check if result already exists
+            # Check if result already exists (this check is still needed for individual runs)
             query = DBInterface.execute(
                 db,
                 "SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
@@ -528,7 +544,7 @@ function process_single_spec(
             end
         end # Closes 'for parsed_config in parsed_configs'
     end # Closes 'for r in eachrow(probspec)'
-end # Closes 'function process_single_spec()'
+end
 
 """
     run_benchmarks(args::Dict)
@@ -542,7 +558,7 @@ for each spec.
 """
 function run_benchmarks(args::Dict)
 
-    local config_files = args["configs"]
+    local config_files = args["c"]
 
     local input_specs = args["i"]
     local output_db_arg = args["o"]
