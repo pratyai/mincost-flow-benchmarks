@@ -53,7 +53,8 @@ function setup_database_schema(db::SQLite.DB)
       bytes INTEGER,
       num_vertices INTEGER,
       num_edges INTEGER,
-      true_optimal REAL
+      true_optimal REAL,
+      lemon_time_s REAL
   )
 """,
     )
@@ -117,6 +118,7 @@ end
 
 function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::String)
     local true_optimal::Union{Float64,Missing} = missing
+    local lemon_time_s::Union{Float64,Missing} = missing
     local file_to_solve = indimacs_file
     local is_temp_file = false
 
@@ -133,7 +135,7 @@ function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::Strin
 
     try
         # Execute dimacs-solver
-        solver_output = read(Cmd([dimacs_solver_path, file_to_solve]), String)
+        local start_time = time()
         local stdout_pipe = Pipe()
         local stderr_pipe = Pipe()
         local process = run(
@@ -154,16 +156,29 @@ function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::Strin
         wait(process)
         close(stdout_pipe)
         close(stderr_pipe)
+        local end_time = time()
+        lemon_time_s = end_time - start_time
 
-        # Parse output for optimal value
-        match_obj = match(r"Min flow cost: ([-+]?\d*\.?\d+)", stderr_output)
-        if match_obj !== nothing
-            true_optimal = parse(Float64, match_obj.captures[1])
+        match_obj_optimal = match(r"Min flow cost: ([-+]?\d*\.?\d+)", stderr_output)
+        if match_obj_optimal !== nothing
+            true_optimal = parse(Float64, match_obj_optimal.captures[1])
         else
-            println(
-                "Warning: Could not parse optimal cost from dimacs-solver output for ",
+            println("DEBUG: stderr_output from dimacs-solver:\n" * stderr_output)
+            error(
+                "Could not parse optimal cost from dimacs-solver output for ",
                 file_to_solve,
             )
+        end
+
+        match_obj_time = match(
+            r"Run NetworkSimplex: u: [^,]+, s: [^,]+, cu: [^,]+, cs: [^,]+, real: ([-+]?\d*\.?\d+)s",
+            stderr_output,
+        )
+        if match_obj_time !== nothing
+            lemon_time_s = parse(Float64, match_obj_time.captures[1])
+        else
+            println("DEBUG: stderr_output from dimacs-solver:\n" * stderr_output)
+            error("Could not parse real time from dimacs-solver output for ", file_to_solve)
         end
     catch e
         println("Error running dimacs-solver for ", indimacs_file, ": ", e)
@@ -172,7 +187,7 @@ function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::Strin
             rm(file_to_solve) # Delete the temporary file
         end
     end
-    return true_optimal
+    return (true_optimal, lemon_time_s)
 end
 
 function process_single_spec(
@@ -197,52 +212,56 @@ function process_single_spec(
 
         local problem_id = missing
         local existing_true_optimal::Union{Float64,Missing} = missing
+        local existing_lemon_time_s::Union{Float64,Missing} = missing
 
         query = DBInterface.execute(
             db,
-            "SELECT id, true_optimal FROM problems WHERE name = ?",
+            "SELECT id, true_optimal, lemon_time_s FROM problems WHERE name = ?",
             (r[:name],),
         )
         for row in query
             problem_id = row.id
             existing_true_optimal = row.true_optimal
+            existing_lemon_time_s = row.lemon_time_s
         end
 
         local true_optimal::Union{Float64,Missing} = missing
-        if !ismissing(problem_id) && !ismissing(existing_true_optimal)
-            true_optimal = existing_true_optimal
-            println(
-                "  True optimal value for `",
-                r[:name],
-                "` already exists; skipping recalculation.",
-            )
-        else
-            true_optimal = get_true_optimal_value(dimacs_solver_path, indimacs)
-        end
+        local lemon_time_s::Union{Float64,Missing} = missing
 
         if ismissing(problem_id)
             DBInterface.execute(
                 db,
-                "INSERT INTO problems (name, input_file, bytes, num_vertices, num_edges, true_optimal) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO problems (name, input_file, bytes, num_vertices, num_edges, true_optimal, lemon_time_s) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     r[:name],
                     r[:input_file],
                     r[:bytes],
                     num_vertices,
                     num_edges,
-                    true_optimal,
+                    missing,
+                    missing,
                 ),
             )
             problem_id = SQLite.last_insert_rowid(db)
+        end
+
+        # Always try to get true optimal value and lemon time, and update if missing
+        if ismissing(existing_true_optimal) || ismissing(existing_lemon_time_s)
+            (true_optimal, lemon_time_s) =
+                get_true_optimal_value(dimacs_solver_path, indimacs)
+            DBInterface.execute(
+                db,
+                "UPDATE problems SET true_optimal = ?, lemon_time_s = ? WHERE id = ?",
+                (true_optimal, lemon_time_s, problem_id),
+            )
         else
-            # If problem exists, update true_optimal if it was just calculated or was missing
-            if ismissing(existing_true_optimal) && !ismissing(true_optimal)
-                DBInterface.execute(
-                    db,
-                    "UPDATE problems SET true_optimal = ? WHERE id = ?",
-                    (true_optimal, problem_id),
-                )
-            end
+            true_optimal = existing_true_optimal
+            lemon_time_s = existing_lemon_time_s
+            println(
+                "  True optimal value and lemon solver time for `",
+                r[:name],
+                "` already exists; skipping recalculation.",
+            )
         end
         problem_ids[r[:name]] = problem_id
     end
