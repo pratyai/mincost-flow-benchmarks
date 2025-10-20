@@ -1,11 +1,21 @@
 # MinCostFlowBenchmarksV2
 
-This project provides a benchmarking suite for minimum cost flow solvers in Julia.
+## Project Overview
+
+This project provides a comprehensive benchmarking suite for Minimum Cost Flow (MCF) solvers implemented in Julia. It offers a flexible framework to:
+
+*   Run various MCF problem instances against different solver configurations.
+*   Store detailed benchmark results in an SQLite database.
+*   Visualize solver performance and convergence characteristics using Python plotting scripts.
+*   Generate custom grid-based MCF problem instances.
+*   Simplify benchmark execution through an optional Python-based Graphical User Interface (GUI).
 
 ## Installation
 
+To get started with the MinCostFlowBenchmarksV2 project, follow these steps:
+
 1.  **Install Julia:** If you don't have Julia installed, download it from [julialang.org](https://julialang.org/downloads/).
-2.  **Instantiate the project:** Open a Julia REPL in the project root directory and run the following commands to install the dependencies:
+2.  **Instantiate the Julia project:** Open a Julia REPL in the project root directory and run the following commands to install the necessary Julia dependencies:
 
     ```julia
     using Pkg
@@ -13,107 +23,36 @@ This project provides a benchmarking suite for minimum cost flow solvers in Juli
     Pkg.instantiate()
     ```
 
-## Code Formatting
-
-To format the Julia code in this project, you can use `JuliaFormatter.jl`.
-
-1.  **Add JuliaFormatter to the project (if not already added):**
+3.  **Install Python dependencies (for GUI and plotting):**
+    If you plan to use the GUI or the plotting scripts, ensure Python is installed ([python.org](https://www.python.org/downloads/)) and install `PyQt5`, `polars`, and `matplotlib`:
 
     ```bash
-    julia --project=. -e 'using Pkg; Pkg.add("JuliaFormatter")'
+    pip install PyQt5 polars matplotlib
     ```
-
-2.  **Run the formatter:**
-
-    ```bash
-    julia --project=. -e 'using JuliaFormatter; format(".")'
-    ```
+    *(Note: `polars` is used for efficient data handling, `matplotlib` for plotting.)*
 
 ## Usage
 
-The main entry point for running benchmarks is `src/main.jl`. It takes the following command-line arguments:
+The benchmark suite can be run via a command-line interface (CLI) using the main Julia script or through a user-friendly Python GUI.
 
-*   `-i <path...>`: **(Required)** Paths to one or more input spec files. The spec file is a CSV file that lists the problem instances to run. See `data/specs/warmup.inspec` for an example.
-*   `--configs <path...>`: **(Required)** Paths to one or more solver configuration files. See the "Solver Configuration" section below for details.
-*   `-o <path>`: (Optional) Path to store the output SQLite database file. If left empty, the Julia script will automatically name the database `spec_name.db` for each input spec file.
-*   `-s <path>`: (Optional) Path to a directory where solution flow vectors will be stored (in JLD2 format).
+### Command-Line Interface (CLI)
 
-## Graphical User Interface (GUI)
-
-A Python-based GUI is available to simplify running benchmarks. This GUI allows you to select input spec files and solver configuration files using file dialogs, and then executes the Julia benchmark script.
-
-### GUI Installation
-
-1.  **Install Python:** If you don't have Python installed, download it from [python.org](https://www.python.org/downloads/).
-2.  **Install PyQt5:**
-    ```bash
-    pip install PyQt5
-    ```
-    Ensure Julia is installed and the `julia` command is in your system's PATH.
-
-### GUI Usage
-
-To run the GUI:
+The primary entry point for running benchmarks is `src/main.jl`.
 
 ```bash
-python src/gui.py
+julia --project=. src/main.jl -i <input_spec_path...> --configs <config_path...> [-o <output_db_path>] [-s <solution_dir>]
 ```
 
-*   **Input Spec Files (-i):** Use the "Add Input Spec" button to add one or more input spec files.
-*   **Output Database Path (-o):** Specify the path for the output SQLite database. If left empty, the Julia script will automatically name the database `spec_name.db` for each input spec file.
-*   **Solution Directory (-s):** Specify a directory to save solution flow vectors.
-*   **Config Files (--configs):** Use the "Add Config" button to add one or more solver configuration files.
+**Arguments:**
 
-## Solver Configuration
+*   `-i <path...>`: **(Required)** Path(s) to one or more input specification files. These are CSV files listing the problem instances to be run.
+    *   *Example:* `data/specs/warmup.inspec`
+*   `-c <path...>`: **(Required)** Path(s) to one or more solver configuration files (TOML format). These files define the solver to use and its specific parameters.
+    *   *Example:* `configs/cholmod.toml`
+*   `-o <path>`: (Optional) Path to the output SQLite database file. If omitted, the Julia script will automatically create a database named `spec_name.db` for each input spec file in the current directory.
+*   `-s <path>`: (Optional) Path to a directory where solution flow vectors will be stored (in JLD2 format) for each problem run.
 
-Solver configurations are defined in TOML files located in the `configs/` directory. Each configuration file specifies the solver to use and its parameters.
-
-### Example: `configs/cholmod.toml`
-
-```toml
-solver = "tulip_cholmod"
-
-[parameters]
-IPM_PRegMin = 1e-6
-IPM_DRegMin = 1e-6
-
-[cholmod_parameters]
-NestedDissection = true
-```
-
-### Example: `configs/approxchol.toml`
-
-```toml
-solver = "tulip_approxchol"
-
-[parameters]
-IPM_PRegMin = 1e-4
-IPM_DRegMin = 1e-8
-IPM_IterationsLimit = 200
-
-[kustom_parameters]
-pcg_maxits = 100
-pcg_tol = 5e-8
-
-[kustom_parameters.ApproxCholParams]
-type = "deg"
-stag_test = 0
-split = 2
-merge = 2
-```
-
-## Output Database
-
-The benchmark results are stored in a SQLite database file. The database contains three tables:
-
-*   `configs`: This table stores the unique solver configurations used for the runs, including flattened parameters like `solver_name`, `ipm_preg_min`, `pcg_maxits`, etc. for easier querying.
-*   `runs`: This table stores the main results for each benchmark run, with foreign keys to the `configs` and `problems` tables.
-*   `problems`: This table stores details about each problem instance, including its name, input file path, size, true optimal value, and the time taken by the Lemon solver to find it.
-*   `solver_history`: This table stores the detailed history of the linear solver's residual norm and PCG iteration count for each iteration of the interior-point method, linked to the `runs` table.
-
-You can use any SQLite client to browse and analyze the results.
-
-### Example Commands
+**Example Commands:**
 
 *   **Run the warmup spec with a single solver configuration:**
 
@@ -127,24 +66,128 @@ You can use any SQLite client to browse and analyze the results.
     julia --project=. src/main.jl -i data/specs/warmup.inspec --configs configs/cholmod.toml configs/approxchol.toml
     ```
 
----
+### Graphical User Interface (GUI)
 
-## Generating Problem Instances
+A Python-based GUI simplifies the process of configuring and launching benchmark runs.
 
-To generate the grid problem instances used for benchmarking, there are two scripts:
+**To run the GUI:**
 
-*   **`scripts/generate_grid_problems.jl`**: Generates grid problems with random capacities and costs (named "widegrid").
+```bash
+python src/gui.py
+```
+
+**GUI Usage:**
+
+*   **Input Spec Files (-i):** Use the "➕" button to add one or more input spec files.
+*   **Config Files (-c):** Use the "➕" button to add one or more solver configuration files.
+*   **Output Database Path (-o):** Specify the path for the output SQLite database. If left empty, the Julia script will automatically name the database `spec_name.db` for each input spec file.
+*   **Solution Directory (-s):** Specify a directory to save solution flow vectors.
+*   Click "Run Benchmarks" to execute the Julia script. The GUI will close, and the benchmark output will be streamed to your console.
+
+## Solver Configuration
+
+Solver configurations are defined in TOML files, typically located in the `configs/` directory. Each file specifies a solver and its parameters, allowing for fine-grained control over the benchmarked algorithms.
+
+### Example: `configs/cholmod.toml`
+
+This configuration uses the `tulip_cholmod` solver.
+
+```toml
+solver = "tulip_cholmod"
+
+[parameters]
+IPM_PRegMin = 1e-6  # Primal regularization minimum
+IPM_DRegMin = 1e-6  # Dual regularization minimum
+
+[cholmod_parameters]
+NestedDissection = true # Enable nested dissection ordering for CHOLMOD
+```
+
+### Example: `configs/approxchol.toml`
+
+This configuration uses the `tulip_approxchol` solver, which leverages an approximate Cholesky factorization.
+
+```toml
+solver = "tulip_approxchol"
+
+[parameters]
+IPM_PRegMin = 1e-4          # Primal regularization minimum
+IPM_DRegMin = 1e-8          # Dual regularization minimum
+IPM_IterationsLimit = 200   # Maximum number of IPM iterations
+
+[kustom_parameters]
+pcg_maxits = 100            # Maximum iterations for the Preconditioned Conjugate Gradient (PCG) solver
+pcg_tol = 5e-8              # Tolerance for the PCG solver
+
+[kustom_parameters.ApproxCholParams]
+type = "deg"                # Type of approximate Cholesky factorization (e.g., 'deg' for degree ordering)
+stag_test = 0               # Stagnation test parameter
+split = 2                   # Split parameter
+merge = 2                   # Merge parameter
+```
+
+## Output Database
+
+Benchmark results are systematically stored in a SQLite database. This database is structured to facilitate easy querying and analysis of solver performance.
+
+**Tables:**
+
+*   `problems`: Contains metadata for each problem instance, including name, file path, size (vertices, edges), and optionally the true optimal value and time taken by an external Lemon solver.
+*   `configs`: Stores the unique solver configurations (as TOML text) used in the runs, along with flattened key parameters for easier filtering.
+*   `runs`: Records the main results for each solver-problem pair, including status, solution time, iteration count, and links to `problems` and `configs`.
+*   `solver_history`: Detailed iteration-level data for solvers, such as IPM iteration number, residual norms, and PCG iterations.
+
+You can use any SQLite client (e.g., `sqlite3` command-line tool, DB Browser for SQLite) to browse and analyze the results. The Python plotting scripts in `plots/` are designed to visualize this data.
+
+## Plotting Results
+
+The `plots/` directory contains Python scripts to visualize the benchmark results stored in the SQLite database.
+
+*   `plots/solver_performance.py`: Plots solver time and iteration count against problem size (number of edges).
+*   `plots/failure_points_plot.py`: Identifies and plots IPM iterations where solvers experienced convergence issues (residual norm > PCG tolerance).
+*   `plots/solver_history_plot.py`: Shows the number of problems failing convergence criteria over IPM iterations for different solvers.
+
+**Example Usage:**
+
+```bash
+python plots/solver_performance.py <path_to_output.db>
+python plots/failure_points_plot.py <path_to_output.db> --problem-pattern "grid_wide_08*"
+```
+
+## Development
+
+### Code Formatting (Julia)
+
+To ensure consistent code style for Julia files, `JuliaFormatter.jl` is used.
+
+1.  **Add JuliaFormatter to the project (if not already added):**
+
+    ```bash
+    julia --project=. -e 'using Pkg; Pkg.add("JuliaFormatter")'
+    ```
+
+2.  **Run the formatter:**
+
+    ```bash
+    julia --project=. -e 'using JuliaFormatter; format(".")'
+    ```
+
+### Generating Problem Instances
+
+The benchmark suite includes scripts to generate various grid-based MCF problem instances. These are useful for creating custom benchmark sets.
+
+*   **`scripts/generate_grid_problems.jl`**: Generates grid problems with random capacities and costs (referred to as "widegrid" problems).
 
     ```bash
     julia --project=. scripts/generate_grid_problems.jl
     ```
 
-    This script will create `.min.gz` and `.min` files in the `data/problems/widegrid/` directory and update the `data/specs/widegrid.inspec` file with the generated problems.
+    This script creates `.min.gz` and `.min` files in `data/problems/widegrid/` and updates `data/specs/widegrid.inspec`.
 
-*   **`scripts/generate_uniform_grid_problems.jl`**: Generates grid problems with uniform capacities and costs (all 1, named "unifwidegrid").
+*   **`scripts/generate_uniform_grid_problems.jl`**: Generates grid problems with uniform capacities and costs (all set to 1, referred to as "unifwidegrid" problems).
 
     ```bash
     julia --project=. scripts/generate_uniform_grid_problems.jl
     ```
 
-    This script will create `.min.gz` and `.min` files in the `data/problems/unifwidegrid/` directory and update the `data/specs/unifwidegrid.inspec` file with the generated problems.
+    This script creates `.min.gz` and `.min` files in `data/problems/unifwidegrid/` and updates `data/specs/unifwidegrid.inspec`.

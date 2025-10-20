@@ -1,3 +1,11 @@
+"""
+    GridGraphs
+
+This module provides functions for generating various types of grid graphs
+formatted as Minimum Cost Flow Problem (MCFP) instances using the DIMACS format.
+It includes utilities for constructing grid topologies and calculating maximum flow
+to ensure problem feasibility.
+"""
 module GridGraphs
 
 using Dimacs
@@ -5,6 +13,24 @@ using SparseArrays
 using Random
 using DataStructures # For Queue
 
+"""
+    _calculate_max_flow(s_node, t_node, total_nodes, dimacs_directed_edges, arc_capacities)
+
+Calculates the maximum flow from a source node to a sink node in a given graph
+using the Edmonds-Karp algorithm. This is a helper function used internally
+to ensure the feasibility of generated MCFP instances by setting appropriate
+supply and demand values.
+
+# Arguments
+- `s_node::Int`: The source node.
+- `t_node::Int`: The sink node.
+- `total_nodes::Int`: The total number of nodes in the graph.
+- `dimacs_directed_edges::Vector{Tuple{Int,Int}}`: A list of directed edges as (u, v) tuples.
+- `arc_capacities::Vector{Int}`: A list of capacities corresponding to `dimacs_directed_edges`.
+
+# Returns
+- `max_flow_value::Int`: The maximum flow value from `s_node` to `t_node`.
+"""
 function _calculate_max_flow(
     s_node::Int,
     t_node::Int,

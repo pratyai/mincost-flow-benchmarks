@@ -1,3 +1,9 @@
+# Generates a set of wide grid-based Minimum Cost Flow Problems (MCFP) with uniform
+# costs and capacities (all set to 1). The grids have a fixed height and variable width.
+# Each generated problem is saved as a DIMACS `.min` and `.min.gz` file in the
+# `data/problems/unifwidegrid` directory, and an entry is added to the
+# `data/specs/unifwidegrid.inspec` file.
+
 using Random
 using Dimacs
 using SparseArrays # Required by Dimacs.jl

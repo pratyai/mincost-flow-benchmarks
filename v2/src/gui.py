@@ -98,7 +98,7 @@ class MinCostFlowGUI(QWidget):
 
         # Config Files (List Widget)
         config_layout = QVBoxLayout()
-        config_label = QLabel("Config Files (--configs):")
+        config_label = QLabel("Config Files (-c):")
         config_layout.addWidget(config_label)
 
         self.config_list_widget = QListWidget()

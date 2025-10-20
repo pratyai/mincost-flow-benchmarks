@@ -1,3 +1,11 @@
+"""
+    Dimacs
+
+A module for parsing and writing DIMACS-formatted Minimum Cost Flow Problem (MCFP) files.
+
+This module provides data structures to represent MCFP networks and functions to read
+them from `.min` or `.min.gz` files, and to write them back to a gzipped `.min.gz` file.
+"""
 module Dimacs
 
 using SparseArrays
@@ -7,6 +15,18 @@ using GZip
 
 # Problem description reader utility
 
+"""
+    Graph
+
+A struct representing the topology of a directed graph.
+
+# Fields
+- `n::Int`: The number of nodes in the graph.
+- `m::Int`: The number of edges in the graph.
+- `EdgeList::Matrix{Int}`: An `m x 2` matrix where each row `[u, v]` represents a directed edge from node `u` to node `v`.
+- `IncidenceMatrix::SparseMatrixCSC{Int8,Int}`: A sparse `n x m` node-arc incidence matrix.
+- `AdjacencyMatrix::SparseMatrixCSC{Int,Int}`: A sparse `n x n` adjacency matrix.
+"""
 @kwdef struct Graph
     n::Int
     m::Int
@@ -15,6 +35,17 @@ using GZip
     AdjacencyMatrix::SparseMatrixCSC{Int,Int}
 end
 
+"""
+    McfpNet{Tv<:Number}
+
+A struct representing a Minimum Cost Flow Problem (MCFP) network.
+
+# Fields
+- `G::Graph`: The underlying graph structure.
+- `Cost::Vector{Tv}`: A vector of costs for each edge in `G.EdgeList`.
+- `Cap::Vector{Tv}`: A vector of capacities for each edge in `G.EdgeList`.
+- `Demand::Vector{Tv}`: A vector of demands for each node in `G`. Positive values are demands, negative values are supplies.
+"""
 @kwdef struct McfpNet{Tv<:Number}
     G::Graph
     Cost::Vector{Tv}
@@ -22,6 +53,18 @@ end
     Demand::Vector{Tv}
 end
 
+"""
+    FromEdgeList(n::Int, E::Matrix{Int}) -> Graph
+
+Constructs a `Graph` object from a given number of nodes and an edge list.
+
+# Arguments
+- `n::Int`: The total number of nodes.
+- `E::Matrix{Int}`: An `m x 2` matrix representing the `m` directed edges.
+
+# Returns
+- A `Graph` object.
+"""
 function FromEdgeList(n::Int, E::Matrix{Int})
     local m = size(E, 1)
     @assert size(E) == (m, 2)
@@ -30,6 +73,18 @@ function FromEdgeList(n::Int, E::Matrix{Int})
     return Graph(n = n, m = m, EdgeList = E, IncidenceMatrix = Inc, AdjacencyMatrix = Adj)
 end
 
+"""
+    MakeIncidenceMatrix(n::Int, E::Matrix{Int}) -> SparseMatrixCSC{Int8,Int}
+
+Creates a sparse node-arc incidence matrix from an edge list.
+
+# Arguments
+- `n::Int`: The number of nodes.
+- `E::Matrix{Int}`: An `m x 2` edge list matrix.
+
+# Returns
+- An `n x m` sparse incidence matrix.
+"""
 function MakeIncidenceMatrix(n::Int, E::Matrix{Int})
     local m = size(E, 1)
     @assert size(E) == (m, 2)
@@ -40,6 +95,19 @@ function MakeIncidenceMatrix(n::Int, E::Matrix{Int})
     return A
 end
 
+"""
+    MakeAdjacencyMatrix(n::Int, E::Matrix{Int}, w::Vector{Tv}) where {Tv<:Number} -> SparseMatrixCSC{Int,Int}
+
+Creates a sparse adjacency matrix from an edge list and corresponding weights.
+
+# Arguments
+- `n::Int`: The number of nodes.
+- `E::Matrix{Int}`: An `m x 2` edge list matrix.
+- `w::Vector{Tv}`: A vector of weights for each edge.
+
+# Returns
+- An `n x n` sparse adjacency matrix.
+"""
 function MakeAdjacencyMatrix(n::Int, E::Matrix{Int}, w::Vector{Tv}) where {Tv<:Number}
     local m = size(E, 1)
     @assert size(E) == (m, 2)
@@ -51,6 +119,21 @@ function MakeAdjacencyMatrix(n::Int, E::Matrix{Int}, w::Vector{Tv}) where {Tv<:N
     return Adj
 end
 
+"""
+    ReadDimacs(path::String) -> McfpNet
+
+Reads a DIMACS-formatted MCFP file (`.min` or `.min.gz`) and constructs an `McfpNet` object.
+
+The parser handles problem lines (`p`), node descriptor lines (`n`), and arc descriptor lines (`a`).
+It assumes the convention where supplies are positive and demands are negative in the file,
+but inverts this to match the internal convention (demand is positive).
+
+# Arguments
+- `path::String`: The path to the DIMACS file.
+
+# Returns
+- An `McfpNet` object representing the problem.
+"""
 function ReadDimacs(path::String)
     local n, m, E = nothing, nothing, nothing
     local C, U, B = nothing, nothing, nothing
@@ -88,6 +171,15 @@ function ReadDimacs(path::String)
     return netw
 end
 
+"""
+    WriteDimacs(path::String, G::McfpNet)
+
+Writes an `McfpNet` object to a gzipped DIMACS-formatted file.
+
+# Arguments
+- `path::String`: The path to the output `.min.gz` file.
+- `G::McfpNet`: The MCFP network to write.
+"""
 function WriteDimacs(path::String, G::McfpNet)
     GZip.open(path, "w") do f
         @printf(f, "p min %d %d\n", G.G.n, G.G.m)

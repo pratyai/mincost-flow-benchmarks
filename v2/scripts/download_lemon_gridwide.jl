@@ -1,3 +1,8 @@
+# Downloads the 'grid_wide' benchmark set from the LEMON project website.
+# For each problem, it downloads the .min.gz file, saves it to the
+# `data/problems/lemon_gridwide` directory, and records its metadata
+# in the `data/specs/lemon_gridwide.inspec` file.
+
 using Downloads
 using GZip
 using Printf

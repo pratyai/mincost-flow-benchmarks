@@ -1,3 +1,17 @@
+"""
+    main.jl
+
+This script serves as the main entry point for running the MinCostFlowBenchmarksV2.jl
+benchmark suite. It parses command-line arguments, sets up the SQLite database schema,
+executes various solvers on specified problem instances, and records the results.
+
+The script supports:
+- Specifying input problem files (`.inspec`).
+- Defining solver configurations via TOML files.
+- Storing benchmark results in an SQLite database.
+- Optionally saving solution flow vectors.
+- Automatically calculating true optimal values using an external DIMACS solver.
+"""
 using ArgParse
 using CSV
 using DataFrames
@@ -16,6 +30,22 @@ include("solvers/TulipCHOLMOD.jl")
 
 const SOLVERS = Dict("tulip_approxchol" => TulipApproxChol, "tulip_cholmod" => TulipCHOLMOD)
 
+"""
+    parse_cmdargs() -> Dict
+
+Parses command-line arguments for the benchmark runner.
+
+# Arguments
+- `-i, --input-spec-files`: Path(s) to input spec file(s) (required).
+- `-o, --output-db`: Path to store the output database. If absent, a database
+  named after the spec file will be created for each spec.
+- `-s, --solution-dir`: Directory to store solution flow-vectors. If absent,
+  solutions will not be stored.
+- `--configs`: Path(s) to solver configuration files (required).
+
+# Returns
+- A `Dict` containing the parsed command-line arguments.
+"""
 function parse_cmdargs()
     s = ArgParseSettings()
     @add_arg_table s begin
@@ -33,7 +63,7 @@ function parse_cmdargs()
         arg_type = Union{Nothing,String}
         required = false
         default = nothing
-        "--configs"
+        "-c"
         help = "paths to solver config files"
         arg_type = String
         nargs = '+'
@@ -42,6 +72,15 @@ function parse_cmdargs()
     return parse_args(s)
 end
 
+"""
+    setup_database_schema(db::SQLite.DB)
+
+Sets up the necessary tables in the SQLite database for storing benchmark results.
+Tables include `problems`, `configs`, `runs`, and `solver_history`.
+
+# Arguments
+- `db::SQLite.DB`: An opened SQLite database connection.
+"""
 function setup_database_schema(db::SQLite.DB)
     SQLite.execute(
         db,
@@ -116,6 +155,22 @@ function setup_database_schema(db::SQLite.DB)
     )
 end
 
+"""
+    get_true_optimal_value(dimacs_solver_path::String, indimacs_file::String) -> Tuple{Union{Float64,Missing}, Union{Float64,Missing}}
+
+Executes an external DIMACS solver to obtain the true optimal cost and solution time
+for a given problem instance. Handles gzipped input files by decompressing them
+to a temporary file.
+
+# Arguments
+- `dimacs_solver_path::String`: The absolute path to the DIMACS solver executable.
+- `indimacs_file::String`: The path to the DIMACS problem file (`.min` or `.min.gz`).
+
+# Returns
+- A `Tuple` containing:
+  - `true_optimal::Union{Float64,Missing}`: The true optimal cost, or `missing` if parsing fails.
+  - `lemon_time_s::Union{Float64,Missing}`: The time taken by the DIMACS solver, or `missing` if parsing fails.
+"""
 function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::String)
     local true_optimal::Union{Float64,Missing} = missing
     local lemon_time_s::Union{Float64,Missing} = missing
@@ -190,6 +245,18 @@ function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::Strin
     return (true_optimal, lemon_time_s)
 end
 
+"""
+    process_single_spec(input_spec_file::String, output_db_path::String, solution_dir::Union{Nothing,String}, config_files::Vector{String})
+
+Processes a single input spec file, running benchmarks for each problem and solver
+configuration, and storing the results in the specified SQLite database.
+
+# Arguments
+- `input_spec_file::String`: Path to the input spec file (CSV format).
+- `output_db_path::String`: Path to the SQLite database where results will be stored.
+- `solution_dir::Union{Nothing,String}`: Optional directory to save solution flow-vectors.
+- `config_files::Vector{String}`: A list of paths to solver configuration files.
+"""
 function process_single_spec(
     input_spec_file::String,
     output_db_path::String,
@@ -463,6 +530,16 @@ function process_single_spec(
     end # Closes 'for r in eachrow(probspec)'
 end # Closes 'function process_single_spec()'
 
+"""
+    run_benchmarks(args::Dict)
+
+Orchestrates the execution of benchmarks based on parsed command-line arguments.
+It iterates through input spec files, sets up the database, and calls `process_single_spec`
+for each spec.
+
+# Arguments
+- `args::Dict`: A dictionary containing parsed command-line arguments.
+"""
 function run_benchmarks(args::Dict)
 
     local config_files = args["configs"]
