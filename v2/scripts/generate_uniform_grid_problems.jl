@@ -57,4 +57,6 @@ open(spec_filename, "w") do io
     end
 end
 
-println("Generated $(length(w_values)) uniform grid problems and spec file: $(spec_filename)")
+println(
+    "Generated $(length(w_values)) uniform grid problems and spec file: $(spec_filename)",
+)

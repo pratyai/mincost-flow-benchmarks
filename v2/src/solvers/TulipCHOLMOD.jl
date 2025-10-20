@@ -281,9 +281,10 @@ function solve(netw::Dimacs.McfpNet, config::Dict)
     iters = Tulip.get_attribute(lp, Tulip.BarrierIterations())
     seconds = Tulip.get_attribute(lp, Tulip.SolutionTime())
     solution = lp.solution.x
+    objective_value = Tulip.get_attribute(lp, Tulip.ObjectiveValue())
     residual_history = lp.solver.kkt.residual_history
 
-    return (; status, iters, seconds, solution, residual_history)
+    return (; status, iters, seconds, solution, objective_value, residual_history)
 end
 
 end # module TulipCHOLMOD

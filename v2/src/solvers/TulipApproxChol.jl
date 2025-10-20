@@ -376,6 +376,7 @@ function solve(netw::Dimacs.McfpNet, config::Dict)
     iters = Tulip.get_attribute(lp, Tulip.BarrierIterations())
     seconds = Tulip.get_attribute(lp, Tulip.SolutionTime())
     solution = lp.solution.x
+    objective_value = Tulip.get_attribute(lp, Tulip.ObjectiveValue())
 
     # Extract additional metrics from the solver timer
     to = lp.solver.timer
@@ -391,6 +392,7 @@ function solve(netw::Dimacs.McfpNet, config::Dict)
         iters,
         seconds,
         solution,
+        objective_value,
         fact_s = fact_ns * 1e-9,
         solv_s = solv_ns * 1e-9,
         sddm_calls,

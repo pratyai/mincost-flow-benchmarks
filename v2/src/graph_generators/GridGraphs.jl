@@ -273,10 +273,7 @@ ensuring the generated problem is feasible.
 # Returns
 - A `Dimacs.McfpNet` object representing the generated grid graph MCFP instance.
 """
-function generate_grid_graph_mcfp_uniform(
-    h::Int,
-    w::Int,
-)
+function generate_grid_graph_mcfp_uniform(h::Int, w::Int)
     num_grid_nodes = h * w
     s_node = num_grid_nodes + 1
     t_node = num_grid_nodes + 2

@@ -5,6 +5,7 @@ using JLD2
 using SQLite
 using TOML
 using Debugger
+using GZip
 
 using Dimacs
 
@@ -19,13 +20,14 @@ function parse_cmdargs()
     s = ArgParseSettings()
     @add_arg_table s begin
         "-i"
-        help = "input spec file"
+        help = "input spec file(s)"
         arg_type = String
+        nargs = '+' # Allow multiple input spec files
         required = true
         "-o"
-        help = "path to store the output database (if absent, will use benchmarks.db)"
-        arg_type = String
-        default = "benchmarks.db"
+        help = "path to store the output database (if absent, will use spec_name.db for each spec)"
+        arg_type = Union{Nothing,String}
+        default = nothing
         "-s"
         help = "output solution flow-vectors directory (if absent, will not store solutions)"
         arg_type = Union{Nothing,String}
@@ -40,27 +42,7 @@ function parse_cmdargs()
     return parse_args(s)
 end
 
-function run_benchmarks(args::Dict)
-
-    local config_files = args["configs"]
-
-    local input_spec = args["i"]
-    if !isnothing(input_spec)
-        input_spec = strip(input_spec)
-    end
-    local output_db = args["o"]
-    if !isnothing(output_db)
-        output_db = strip(output_db)
-    end
-    local solution_dir = args["s"]
-    if !isnothing(solution_dir)
-        solution_dir = strip(solution_dir)
-    end
-
-    local probspec = CSV.read(input_spec, DataFrame)
-
-    # Setup database
-    db = SQLite.DB(output_db)
+function setup_database_schema(db::SQLite.DB)
     SQLite.execute(
         db,
         """
@@ -68,7 +50,10 @@ function run_benchmarks(args::Dict)
       id INTEGER PRIMARY KEY,
       name TEXT UNIQUE,
       input_file TEXT,
-      bytes INTEGER
+      bytes INTEGER,
+      num_vertices INTEGER,
+      num_edges INTEGER,
+      true_optimal REAL
   )
 """,
     )
@@ -108,6 +93,7 @@ function run_benchmarks(args::Dict)
       fact_s REAL,
       solv_s REAL,
       sddm_calls INTEGER,
+      optimal_value REAL,
       FOREIGN KEY (config_id) REFERENCES configs(id),
       FOREIGN KEY (problem_id) REFERENCES problems(id)
   )
@@ -127,24 +113,136 @@ function run_benchmarks(args::Dict)
   )
 """,
     )
+end
 
+function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::String)
+    local true_optimal::Union{Float64,Missing} = missing
+    local file_to_solve = indimacs_file
+    local is_temp_file = false
+
+    if endswith(indimacs_file, ".gz")
+        temp_file = mktemp()[1] # Create a temporary file
+        GZip.open(indimacs_file) do gz_file
+            open(temp_file, "w") do out_file
+                write(out_file, read(gz_file))
+            end
+        end
+        file_to_solve = temp_file
+        is_temp_file = true
+    end
+
+    try
+        # Execute dimacs-solver
+        solver_output = read(Cmd([dimacs_solver_path, file_to_solve]), String)
+        local stdout_pipe = Pipe()
+        local stderr_pipe = Pipe()
+        local process = run(
+            pipeline(
+                Cmd([dimacs_solver_path, file_to_solve]),
+                stdout = stdout_pipe,
+                stderr = stderr_pipe,
+            ),
+            wait = false,
+        )
+
+        # Close the write ends of the pipes in the parent process
+        close(stdout_pipe.in)
+        close(stderr_pipe.in)
+
+        local stdout_output = read(stdout_pipe, String)
+        local stderr_output = read(stderr_pipe, String)
+        wait(process)
+        close(stdout_pipe)
+        close(stderr_pipe)
+
+        # Parse output for optimal value
+        match_obj = match(r"Min flow cost: ([-+]?\d*\.?\d+)", stderr_output)
+        if match_obj !== nothing
+            true_optimal = parse(Float64, match_obj.captures[1])
+        else
+            println(
+                "Warning: Could not parse optimal cost from dimacs-solver output for ",
+                file_to_solve,
+            )
+        end
+    catch e
+        println("Error running dimacs-solver for ", indimacs_file, ": ", e)
+    finally
+        if is_temp_file
+            rm(file_to_solve) # Delete the temporary file
+        end
+    end
+    return true_optimal
+end
+
+function process_single_spec(
+    input_spec_file::String,
+    output_db_path::String,
+    solution_dir::Union{Nothing,String},
+    config_files::Vector{String},
+)
+    local probspec = CSV.read(input_spec_file, DataFrame)
+
+    # Setup database
+    db = SQLite.DB(output_db_path)
     # Populate problems table
     problem_ids = Dict{String,Int}()
+    dimacs_solver_path = "/Users/pmz/Downloads/lemon-1.3.1/build/tools/dimacs-solver"
+
     for r in eachrow(probspec)
-        query =
-            DBInterface.execute(db, "SELECT id FROM problems WHERE name = ?", (r[:name],))
-        problem_id = missing
+        local indimacs::String = joinpath(dirname(Base.@__DIR__), r[:input_file])
+        local netw = Dimacs.ReadDimacs(indimacs)
+        local num_vertices = netw.G.n
+        local num_edges = netw.G.m
+
+        local problem_id = missing
+        local existing_true_optimal::Union{Float64,Missing} = missing
+
+        query = DBInterface.execute(
+            db,
+            "SELECT id, true_optimal FROM problems WHERE name = ?",
+            (r[:name],),
+        )
         for row in query
             problem_id = row.id
+            existing_true_optimal = row.true_optimal
+        end
+
+        local true_optimal::Union{Float64,Missing} = missing
+        if !ismissing(problem_id) && !ismissing(existing_true_optimal)
+            true_optimal = existing_true_optimal
+            println(
+                "  True optimal value for `",
+                r[:name],
+                "` already exists; skipping recalculation.",
+            )
+        else
+            true_optimal = get_true_optimal_value(dimacs_solver_path, indimacs)
         end
 
         if ismissing(problem_id)
             DBInterface.execute(
                 db,
-                "INSERT INTO problems (name, input_file, bytes) VALUES (?, ?, ?)",
-                (r[:name], r[:input_file], r[:bytes]),
+                "INSERT INTO problems (name, input_file, bytes, num_vertices, num_edges, true_optimal) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    r[:name],
+                    r[:input_file],
+                    r[:bytes],
+                    num_vertices,
+                    num_edges,
+                    true_optimal,
+                ),
             )
             problem_id = SQLite.last_insert_rowid(db)
+        else
+            # If problem exists, update true_optimal if it was just calculated or was missing
+            if ismissing(existing_true_optimal) && !ismissing(true_optimal)
+                DBInterface.execute(
+                    db,
+                    "UPDATE problems SET true_optimal = ? WHERE id = ?",
+                    (true_optimal, problem_id),
+                )
+            end
         end
         problem_ids[r[:name]] = problem_id
     end
@@ -295,11 +393,17 @@ function run_benchmarks(args::Dict)
             solv_s = haskey(results, :solv_s) ? results.solv_s : missing
             sddm_calls = haskey(results, :sddm_calls) ? results.sddm_calls : missing
 
+
+
+            # Get optimal value
+            local optimal_value =
+                haskey(results, :objective_value) ? results.objective_value : missing
+
             DBInterface.execute(
                 db,
                 """
-  INSERT INTO runs (name, status, solver_name, config_id, problem_id, time_s, iters, solution_file, fact_s, solv_s, sddm_calls)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+  INSERT INTO runs (name, status, solver_name, config_id, problem_id, time_s, iters, solution_file, fact_s, solv_s, sddm_calls, optimal_value)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
 """,
                 (
                     r[:name],
@@ -313,6 +417,7 @@ function run_benchmarks(args::Dict)
                     fact_s,
                     solv_s,
                     sddm_calls,
+                    optimal_value,
                 ),
             )
 
@@ -337,7 +442,36 @@ function run_benchmarks(args::Dict)
             end
         end # Closes 'for parsed_config in parsed_configs'
     end # Closes 'for r in eachrow(probspec)'
-end # Closes 'function run_benchmarks()'
+end # Closes 'function process_single_spec()'
+
+function run_benchmarks(args::Dict)
+
+    local config_files = args["configs"]
+
+    local input_specs = args["i"]
+    local output_db_arg = args["o"]
+    local solution_dir = args["s"]
+
+    if isnothing(output_db_arg)
+        # No output DB specified, create one per input spec
+        for input_spec_file in input_specs
+            spec_name = splitext(basename(input_spec_file))[1]
+            output_db_name = "$(spec_name).db"
+            println("Running benchmarks for $(input_spec_file) into $(output_db_name)")
+            db = SQLite.DB(output_db_name)
+            setup_database_schema(db)
+            process_single_spec(input_spec_file, output_db_name, solution_dir, config_files)
+        end
+    else
+        # Output DB specified, dump all into it
+        db = SQLite.DB(output_db_arg)
+        setup_database_schema(db)
+        for input_spec_file in input_specs
+            println("Running benchmarks for $(input_spec_file) into $(output_db_arg)")
+            process_single_spec(input_spec_file, output_db_arg, solution_dir, config_files)
+        end
+    end
+end
 
 function main()
     local args = parse_cmdargs()
