@@ -97,7 +97,7 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
     # Solution quality
     ipm_iter::Int
     solve_in_iter::Int
-    residual_history::Vector{Tuple{Int,Int,Tv}}
+    residual_history::Vector{Tuple{Int,Int,Tv,Tv}}
     pcg_iterations_history::Vector{Int}
 end
 
@@ -153,7 +153,7 @@ function Tulip.KKT.setup(
         sddm_solve = sddm_solve,
         ipm_iter = 0,
         solve_in_iter = 0,
-        residual_history = [],
+        residual_history = Tuple{Int,Int,Tv,Tv}[],
         pcg_iterations_history = [],
     )
 end
@@ -242,7 +242,10 @@ function Tulip.KKT.solve!(
     local rhs_norm = norm(kkt.ξ)
     local relative_residual_norm =
         (rhs_norm == 0) ? absolute_residual_norm : absolute_residual_norm / rhs_norm
-    push!(kkt.residual_history, (kkt.ipm_iter, kkt.solve_in_iter, relative_residual_norm))
+    push!(
+        kkt.residual_history,
+        (kkt.ipm_iter, kkt.solve_in_iter, relative_residual_norm, absolute_residual_norm),
+    )
 
     # Recover dx
     copyto!(dx, ξd)

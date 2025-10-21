@@ -81,7 +81,7 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
     # Solution quality
     ipm_iter::Int
     solve_in_iter::Int
-    residual_history::Vector{Tuple{Int,Int,Tv}}
+    residual_history::Vector{Tuple{Int,Int,Tv,Tv}}
 end
 
 Tulip.KKT.backend(::Solver) = "CustomCHOLMOD"
@@ -119,7 +119,20 @@ function Tulip.KKT.setup(
         SuiteSparse.CHOLMOD.symbolic(K_cholmod; nested_dissection = bk.nested_dissection)
     local chol_factor = SuiteSparse.CHOLMOD.cholesky!(F, K_cholmod)
 
-    return Solver{Tv,Ti}(m, n, A, θ, regP, regD, K, ξ, chol_factor, 0, 0, [])
+    return Solver{Tv,Ti}(
+        m,
+        n,
+        A,
+        θ,
+        regP,
+        regD,
+        K,
+        ξ,
+        chol_factor,
+        0,
+        0,
+        Tuple{Int,Int,Tv,Tv}[],
+    )
 end
 
 """
@@ -192,7 +205,10 @@ function Tulip.KKT.solve!(
     local rhs_norm = norm(kkt.ξ)
     local relative_residual_norm =
         (rhs_norm == 0) ? absolute_residual_norm : absolute_residual_norm / rhs_norm
-    push!(kkt.residual_history, (kkt.ipm_iter, kkt.solve_in_iter, relative_residual_norm))
+    push!(
+        kkt.residual_history,
+        (kkt.ipm_iter, kkt.solve_in_iter, relative_residual_norm, absolute_residual_norm),
+    )
 
     # Recover dx
     copyto!(dx, ξd)

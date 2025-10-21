@@ -149,7 +149,8 @@ function setup_database_schema(db::SQLite.DB)
       run_id INTEGER,
       ipm_iter INTEGER,
       solve_in_iter INTEGER,
-      residual_norm REAL,
+      relative_residual_norm REAL,
+      absolute_residual_norm REAL,
       pcg_iterations INTEGER,
       FOREIGN KEY (run_id) REFERENCES runs(id)
   )
@@ -530,15 +531,24 @@ function process_single_spec(
                 pcg_history =
                     haskey(results, :pcg_iterations_history) ?
                     results.pcg_iterations_history : missing
-                for (idx, (ipm_iter, solve_in_iter, residual)) in
-                    enumerate(results.residual_history)
+                for (
+                    idx,
+                    (ipm_iter, solve_in_iter, relative_residual, absolute_residual),
+                ) in enumerate(results.residual_history)
                     pcg_iters =
                         ismissing(pcg_history) || isempty(pcg_history) ? missing :
                         pcg_history[idx]
                     DBInterface.execute(
                         db,
-                        "INSERT INTO solver_history (run_id, ipm_iter, solve_in_iter, residual_norm, pcg_iterations) VALUES (?, ?, ?, ?, ?)",
-                        (run_id, ipm_iter, solve_in_iter, residual, pcg_iters),
+                        "INSERT INTO solver_history (run_id, ipm_iter, solve_in_iter, relative_residual_norm, absolute_residual_norm, pcg_iterations) VALUES (?, ?, ?, ?, ?, ?)",
+                        (
+                            run_id,
+                            ipm_iter,
+                            solve_in_iter,
+                            relative_residual,
+                            absolute_residual,
+                            pcg_iters,
+                        ),
                     )
                 end
             end
