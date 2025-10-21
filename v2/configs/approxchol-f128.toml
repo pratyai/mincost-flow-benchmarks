@@ -1,0 +1,17 @@
+solver = "tulip_approxchol"
+precision = "Float128"
+
+[parameters]
+IPM_PRegMin = 1e-4
+IPM_DRegMin = 1e-8
+IPM_IterationsLimit = 200
+
+[kustom_parameters]
+pcg_maxits = 100 # Maximum number of PCG iterations
+pcg_tol = 5e-8 # Target precision for the PCG solver
+
+[kustom_parameters.ApproxCholParams]
+type = "deg"
+stag_test = 0
+split = 2
+merge = 2

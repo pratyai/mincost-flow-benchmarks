@@ -1,0 +1,10 @@
+solver = "tulip_cholmod"
+precision = "Float64x2"
+
+[parameters]
+IPM_PRegMin = 1e-4
+IPM_DRegMin = 1e-8
+IPM_IterationsLimit = 200
+
+[cholmod_parameters]
+NestedDissection = true

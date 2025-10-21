@@ -1,4 +1,5 @@
 solver = "tulip_cholmod"
+precision = "Float64"
 
 [parameters]
 IPM_PRegMin = 1e-4

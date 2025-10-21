@@ -1,4 +1,5 @@
 solver = "tulip_approxchol"
+precision = "Float64x2"
 
 [parameters]
 IPM_PRegMin = 1e-4
