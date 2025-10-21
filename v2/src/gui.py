@@ -423,6 +423,9 @@ if __name__ == "__main__":
             text=True,
             cwd=JULIA_PROJECT_PATH,
             bufsize=1,
+            env=dict(
+                os.environ, JULIA_NUM_THREADS="2"
+            ),  # Set JULIA_NUM_THREADS for the subprocess
         )
 
         if process.stdout:

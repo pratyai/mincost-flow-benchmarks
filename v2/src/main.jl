@@ -20,6 +20,7 @@ using SQLite
 using TOML
 using Debugger
 using GZip
+using Base.Threads # For multi-threading
 
 using Dimacs
 
@@ -273,28 +274,43 @@ function process_single_spec(
     dimacs_solver_path = "/Users/pmz/Downloads/lemon-1.3.1/build/tools/dimacs-solver"
 
     # --- Pass 1: Populate problems table and get problem_ids ---
+    # Create a channel to send problems to the background solver thread
+    problem_channel = Channel(Inf)
+
+    local lemon_solver_task = nothing # Initialize to nothing
+    local problems_to_solve_in_bg = false
+
     for r in eachrow(probspec)
         local indimacs::String = joinpath(dirname(Base.@__DIR__), r[:input_file])
-        local netw = Dimacs.ReadDimacs(indimacs) # Parse to get num_vertices, num_edges
-        local num_vertices = netw.G.n
-        local num_edges = netw.G.m
 
         local problem_id = missing
         local existing_true_optimal::Union{Float64,Missing} = missing
         local existing_lemon_time_s::Union{Float64,Missing} = missing
+        local existing_num_vertices::Union{Int,Missing} = missing
+        local existing_num_edges::Union{Int,Missing} = missing
 
         query = DBInterface.execute(
             db,
-            "SELECT id, true_optimal, lemon_time_s FROM problems WHERE name = ?",
+            "SELECT id, true_optimal, lemon_time_s, num_vertices, num_edges FROM problems WHERE name = ?",
             (r[:name],),
         )
         for row in query
             problem_id = row.id
             existing_true_optimal = row.true_optimal
             existing_lemon_time_s = row.lemon_time_s
+            existing_num_vertices = row.num_vertices
+            existing_num_edges = row.num_edges
         end
 
+        local num_vertices::Union{Int,Missing} = existing_num_vertices
+        local num_edges::Union{Int,Missing} = existing_num_edges
+
         if ismissing(problem_id)
+            # If problem is new, parse Dimacs to get num_vertices and num_edges
+            local netw = Dimacs.ReadDimacs(indimacs)
+            num_vertices = netw.G.n
+            num_edges = netw.G.m
+
             DBInterface.execute(
                 db,
                 "INSERT INTO problems (name, input_file, bytes, num_vertices, num_edges, true_optimal, lemon_time_s) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -309,24 +325,46 @@ function process_single_spec(
                 ),
             )
             problem_id = SQLite.last_insert_rowid(db)
+        elseif ismissing(existing_num_vertices) || ismissing(existing_num_edges)
+            # If problem exists but num_vertices/num_edges are missing, parse Dimacs to fill them
+            local netw = Dimacs.ReadDimacs(indimacs)
+            num_vertices = netw.G.n
+            num_edges = netw.G.m
+            DBInterface.execute(
+                db,
+                "UPDATE problems SET num_vertices = ?, num_edges = ? WHERE id = ?",
+                (num_vertices, num_edges, problem_id),
+            )
         end
 
         if ismissing(existing_true_optimal) || ismissing(existing_lemon_time_s)
-            (true_optimal, lemon_time_s) =
-                get_true_optimal_value(dimacs_solver_path, indimacs)
-            DBInterface.execute(
-                db,
-                "UPDATE problems SET true_optimal = ?, lemon_time_s = ? WHERE id = ?",
-                (true_optimal, lemon_time_s, problem_id),
-            )
-        else
-            println(
-                "  True optimal value and lemon solver time for `",
-                r[:name],
-                "` already exists; skipping recalculation.",
-            )
+            # Put the problem into the channel for the background solver
+            put!(problem_channel, (r[:name], problem_id, indimacs))
+            problems_to_solve_in_bg = true
         end
         problem_ids[r[:name]] = problem_id
+    end
+
+    # Close the channel to signal that no more problems will be sent
+    close(problem_channel)
+
+    if problems_to_solve_in_bg
+        lemon_solver_task = Threads.@spawn begin
+            for (problem_name, problem_id, indimacs) in problem_channel
+                try
+                    (true_optimal, lemon_time_s) =
+                        get_true_optimal_value(dimacs_solver_path, indimacs)
+                    DBInterface.execute(
+                        db,
+                        "UPDATE problems SET true_optimal = ?, lemon_time_s = ? WHERE id = ?",
+                        (true_optimal, lemon_time_s, problem_id),
+                    )
+                catch e
+                    println("Error in background lemon solver for ", problem_name, ": ", e)
+                    # Optionally, update the problem status in DB to indicate failure
+                end
+            end
+        end
     end
 
     # --- Pass 2: Parse configs and get config_ids ---
@@ -424,7 +462,6 @@ function process_single_spec(
             ),
         )
     end
-
     # --- Pass 3: Run benchmarks, skipping problems if all runs exist ---
     for r in eachrow(probspec)
         local current_problem_id = problem_ids[r[:name]]
@@ -574,6 +611,8 @@ function run_benchmarks(args::Dict)
     local output_db_arg = args["o"]
     local solution_dir = args["s"]
 
+    local all_lemon_tasks = [] # Collect all lemon solver tasks
+
     if isnothing(output_db_arg)
         # No output DB specified, create one per input spec
         for input_spec_file in input_specs
@@ -582,7 +621,15 @@ function run_benchmarks(args::Dict)
             println("Running benchmarks for $(input_spec_file) into $(output_db_name)")
             db = SQLite.DB(output_db_name)
             setup_database_schema(db)
-            process_single_spec(input_spec_file, output_db_name, solution_dir, config_files)
+            lemon_task = process_single_spec(
+                input_spec_file,
+                output_db_name,
+                solution_dir,
+                config_files,
+            )
+            if lemon_task !== nothing
+                push!(all_lemon_tasks, lemon_task)
+            end
         end
     else
         # Output DB specified, dump all into it
@@ -590,8 +637,21 @@ function run_benchmarks(args::Dict)
         setup_database_schema(db)
         for input_spec_file in input_specs
             println("Running benchmarks for $(input_spec_file) into $(output_db_arg)")
-            process_single_spec(input_spec_file, output_db_arg, solution_dir, config_files)
+            lemon_task = process_single_spec(
+                input_spec_file,
+                output_db_arg,
+                solution_dir,
+                config_files,
+            )
+            if lemon_task !== nothing
+                push!(all_lemon_tasks, lemon_task)
+            end
         end
+    end
+
+    # Wait for all background lemon solver tasks to complete
+    for task in all_lemon_tasks
+        wait(task)
     end
 end
 
