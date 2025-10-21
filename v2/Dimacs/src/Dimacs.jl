@@ -139,30 +139,44 @@ function ReadDimacs(path::String)
     local C, U, B = nothing, nothing, nothing
 
     local nxtarc = 1
-    local f = endswith(path, ".gz") ? GZip.open(path) : Base.open(path)
-    local content = read(f, String)
-    f = IOBuffer(content)
-    while !eof(f)
-        local r, c = @scanf(f, "%s", String)
-        if c == "c"
-            c = readline(f)
-        elseif c == "p"
-            r, dir, n, m = @scanf(f, "%s %d %d", String, Int, Int)
-            E, C, U = zeros(Int, m, 2), zeros(Int, m), zeros(Int, m)
-            B = zeros(Int, n)
-        elseif c == "n"
-            r, v, b = @scanf(f, "%d %d", Int, Int)
-            # we adopted the opposite convention :(
-            B[v] = -b
-        elseif c == "a"
-            r, i, j, l, u, c = @scanf(f, "%d %d %d %d %d", Int, Int, Int, Int, Int)
-            E[nxtarc, :] = [i j]
-            C[nxtarc], U[nxtarc] = c, u
-            nxtarc += 1
-            if nxtarc % 1000000 == 1
-                @printf("%dM arcs read\n", fld(nxtarc, 1000000))
+    local file_stream = endswith(path, ".gz") ? GZip.open(path) : Base.open(path)
+    try
+        for line in eachline(file_stream)
+            line = strip(line)
+            if isempty(line) || startswith(line, "c")
+                continue
+            end
+
+            parts = split(line)
+            type = parts[1]
+
+            if type == "p"
+                n = parse(Int, parts[3])
+                m = parse(Int, parts[4])
+                E, C, U = zeros(Int, m, 2), zeros(Int, m), zeros(Int, m)
+                B = zeros(Int, n)
+            elseif type == "n"
+                v = parse(Int, parts[2])
+                b = parse(Int, parts[3])
+                B[v] = -b
+            elseif type == "a"
+                i = parse(Int, parts[2])
+                j = parse(Int, parts[3])
+                # l = parse(Int, parts[4]) # lower bound, usually 0
+                u = parse(Int, parts[5])
+                c = parse(Int, parts[6])
+
+                E[nxtarc, 1] = i
+                E[nxtarc, 2] = j
+                C[nxtarc], U[nxtarc] = c, u
+                nxtarc += 1
+                if nxtarc % 1000000 == 1
+                    @printf("%dM arcs read\n", fld(nxtarc, 1000000))
+                end
             end
         end
+    finally
+        close(file_stream)
     end
     local netw = McfpNet(G = FromEdgeList(n, E), Cost = C, Cap = U, Demand = B)
 
