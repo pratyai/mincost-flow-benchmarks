@@ -5,6 +5,7 @@
 This project provides a comprehensive benchmarking suite for Minimum Cost Flow (MCF) solvers implemented in Julia. It offers a flexible framework to:
 
 *   Run various MCF problem instances against different solver configurations.
+*   Utilize multiple floating-point precisions (`Float64`, `Float128`, `MultiFloat`) configured per solver.
 *   Store detailed benchmark results in an SQLite database.
 *   Visualize solver performance and convergence characteristics using Python plotting scripts.
 *   Generate custom grid-based MCF problem instances.
@@ -15,7 +16,7 @@ This project provides a comprehensive benchmarking suite for Minimum Cost Flow (
 To get started with the MinCostFlowBenchmarksV2 project, follow these steps:
 
 1.  **Install Julia:** If you don't have Julia installed, download it from [julialang.org](https://julialang.org/downloads/).
-2.  **Instantiate the Julia project:** Open a Julia REPL in the project root directory and run the following commands to install the necessary Julia dependencies:
+2.  **Instantiate the Julia project:** Open a Julia REPL in the project root directory and run the following commands to install the necessary Julia dependencies, including `Quadmath` for `Float128` support and `MultiFloats` for extended precision:
 
     ```julia
     using Pkg
@@ -40,7 +41,7 @@ The benchmark suite can be run via a command-line interface (CLI) using the main
 The primary entry point for running benchmarks is `src/main.jl`.
 
 ```bash
-julia --project=. src/main.jl -i <input_spec_path...> --configs <config_path...> [-o <output_db_path>] [-s <solution_dir>]
+julia --project=. src/main.jl -i <input_spec_path...> -c <config_path...> [-o <output_db_path>] [-s <solution_dir>]
 ```
 
 **Arguments:**
@@ -48,7 +49,7 @@ julia --project=. src/main.jl -i <input_spec_path...> --configs <config_path...>
 *   `-i <path...>`: **(Required)** Path(s) to one or more input specification files. These are CSV files listing the problem instances to be run.
     *   *Example:* `data/specs/warmup.inspec`
 *   `-c <path...>`: **(Required)** Path(s) to one or more solver configuration files (TOML format). These files define the solver to use and its specific parameters.
-    *   *Example:* `configs/cholmod.toml`
+    *   *Example:* `configs/cholmod-f64.toml`
 *   `-o <path>`: (Optional) Path to the output SQLite database file. If omitted, the Julia script will automatically create a database named `spec_name.db` for each input spec file in the current directory.
 *   `-s <path>`: (Optional) Path to a directory where solution flow vectors will be stored (in JLD2 format) for each problem run.
 
@@ -57,13 +58,13 @@ julia --project=. src/main.jl -i <input_spec_path...> --configs <config_path...>
 *   **Run the warmup spec with a single solver configuration:**
 
     ```bash
-    julia --project=. src/main.jl -i data/specs/warmup.inspec --configs configs/cholmod.toml
+    julia --project=. src/main.jl -i data/specs/warmup.inspec -c configs/cholmod-f64.toml
     ```
 
-*   **Run the warmup spec with multiple solver configurations:**
+*   **Run the warmup spec with multiple solver configurations and precisions:**
 
     ```bash
-    julia --project=. src/main.jl -i data/specs/warmup.inspec --configs configs/cholmod.toml configs/approxchol.toml
+    julia --project=. src/main.jl -i data/specs/warmup.inspec -c configs/cholmod-f64.toml configs/approxchol-f128.toml
     ```
 
 ### Graphical User Interface (GUI)
@@ -86,44 +87,50 @@ python src/gui.py
 
 ## Solver Configuration
 
-Solver configurations are defined in TOML files, typically located in the `configs/` directory. Each file specifies a solver and its parameters, allowing for fine-grained control over the benchmarked algorithms.
+Solver configurations are defined in TOML files in the `configs/` directory. Each file specifies a solver, its parameters, and the desired floating-point precision.
 
-### Example: `configs/cholmod.toml`
+### Precision Control
 
-This configuration uses the `tulip_cholmod` solver.
+The `precision` key in the configuration file determines the floating-point type used by the solver. Supported values are `"Float64"`, `"Float128"`, and `"Float64x2"`.
+
+### Example: `configs/cholmod-f128.toml`
+
+This configuration uses the `tulip_cholmod` solver with `Float128` precision. For high-precision types, this solver automatically falls back to a generic LDL factorization.
 
 ```toml
 solver = "tulip_cholmod"
+precision = "Float128"
 
 [parameters]
-IPM_PRegMin = 1e-6  # Primal regularization minimum
-IPM_DRegMin = 1e-6  # Dual regularization minimum
+IPM_PRegMin = 1e-6
+IPM_DRegMin = 1e-6
 
 [cholmod_parameters]
-NestedDissection = true # Enable nested dissection ordering for CHOLMOD
+NestedDissection = true
 ```
 
-### Example: `configs/approxchol.toml`
+### Example: `configs/approxchol-f64.toml`
 
-This configuration uses the `tulip_approxchol` solver, which leverages an approximate Cholesky factorization.
+This configuration uses the `tulip_approxchol` solver with standard `Float64` precision.
 
 ```toml
 solver = "tulip_approxchol"
+precision = "Float64"
 
 [parameters]
-IPM_PRegMin = 1e-4          # Primal regularization minimum
-IPM_DRegMin = 1e-8          # Dual regularization minimum
-IPM_IterationsLimit = 200   # Maximum number of IPM iterations
+IPM_PRegMin = 1e-4
+IPM_DRegMin = 1e-8
+IPM_IterationsLimit = 200
 
 [kustom_parameters]
-pcg_maxits = 100            # Maximum iterations for the Preconditioned Conjugate Gradient (PCG) solver
-pcg_tol = 5e-8              # Tolerance for the PCG solver
+pcg_maxits = 100
+pcg_tol = 5e-8
 
 [kustom_parameters.ApproxCholParams]
-type = "deg"                # Type of approximate Cholesky factorization (e.g., 'deg' for degree ordering)
-stag_test = 0               # Stagnation test parameter
-split = 2                   # Split parameter
-merge = 2                   # Merge parameter
+type = "deg"
+stag_test = 0
+split = 2
+merge = 2
 ```
 
 ## Output Database
@@ -133,7 +140,7 @@ Benchmark results are systematically stored in a SQLite database. This database 
 **Tables:**
 
 *   `problems`: Contains metadata for each problem instance, including name, file path, size (vertices, edges), and optionally the true optimal value and time taken by an external Lemon solver.
-*   `configs`: Stores the unique solver configurations (as TOML text) used in the runs, along with flattened key parameters for easier filtering.
+*   `configs`: Stores the unique solver configurations (as TOML text) used in the runs, along with flattened key parameters for easier filtering, including the `precision`.
 *   `runs`: Records the main results for each solver-problem pair, including status, solution time, iteration count, and links to `problems` and `configs`.
 *   `solver_history`: Detailed iteration-level data for solvers, such as IPM iteration number, residual norms, and PCG iterations.
 

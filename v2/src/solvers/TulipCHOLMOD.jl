@@ -1,9 +1,9 @@
 """
 Module TulipCHOLMOD
 
-This module defines a Tulip solver that utilizes a custom KKT solver based on CHOLMOD.
-It provides explicit control over the KKT system solution, serving as an example
-of integrating a custom KKT solver with Tulip.jl for Minimum Cost Flow Problems (MCFP).
+This module defines a meta-solver that uses a custom KKT solver based on CHOLMOD
+for standard floating-point types (`Float32`, `Float64`) and automatically falls back
+to a pure Julia LDL factorization for higher-precision types.
 """
 module TulipCHOLMOD
 
@@ -13,6 +13,7 @@ using SparseArrays
 using LinearAlgebra
 using Random
 using SuiteSparse
+using LDLFactorizations
 
 """
 Module CholmodKKT
@@ -20,6 +21,7 @@ Module CholmodKKT
 This submodule implements a custom KKT solver backend using CHOLMOD for solving
 the normal equations system within Tulip.jl's interior-point method. It's adapted
 from Tulip.jl's internal implementation to allow for specific CHOLMOD configurations.
+This backend is only used for `Float32` and `Float64` due to CHOLMOD's limitations.
 """
 module CholmodKKT
 
@@ -31,37 +33,10 @@ using SuiteSparse
 using SparseArrays: AbstractSparseMatrix
 using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
 
-"""
-Backend for the custom CHOLMOD KKT solver.
-
-# Fields
-- `nested_dissection::Bool`: If `true`, enables nested dissection ordering for CHOLMOD,
-  which can improve factorization performance for certain sparse matrix structures.
-"""
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
     nested_dissection::Bool = false
 end
 
-"""
-Solver for the custom CHOLMOD KKT solver.
-
-This mutable struct holds the problem data, workspace variables, CHOLMOD factorization
-object, and solution quality metrics for the KKT system.
-
-# Fields
-- `m::Ti`: Number of constraints.
-- `n::Ti`: Number of variables.
-- `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix.
-- `θ::Vector{Tv}`: Diagonal scaling vector.
-- `regP::Vector{Tv}`: Primal regularization vector.
-- `regD::Vector{Tv}`: Dual regularization vector.
-- `K::SparseMatrixCSC{Tv,Ti}`: The KKT matrix.
-- `ξ::Vector{Tv}`: Right-hand side vector of the KKT system.
-- `chol_factor::SuiteSparse.CHOLMOD.Factor{Tv}`: The CHOLMOD factorization object.
-- `ipm_iter::Int`: Current Interior Point Method iteration count.
-- `solve_in_iter::Int`: Counter for solves within the current IPM iteration.
-- `residual_history::Vector{Tuple{Int, Int, Tv}}`: History of residual norms.
-"""
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
     # Problem data
     m::Ti
@@ -87,20 +62,6 @@ end
 Tulip.KKT.backend(::Solver) = "CustomCHOLMOD"
 Tulip.KKT.linear_system(::Solver) = "Normal equations (K1)"
 
-"""
-    Tulip.KKT.setup(A, ::K1, bk::Backend)
-
-Sets up the KKT solver for the CHOLMOD backend. This involves initializing
-the necessary data structures and performing a symbolic factorization using CHOLMOD.
-
-# Arguments
-- `A::AbstractSparseMatrix{Tv,Ti}`: The constraint matrix of the optimization problem.
-- `::K1`: Indicates the K1 KKT system formulation.
-- `bk::Backend`: The backend configuration for the CHOLMOD solver.
-
-# Returns
-- A `Solver` instance initialized for the CHOLMOD KKT system.
-"""
 function Tulip.KKT.setup(
     A::AbstractSparseMatrix{Tv,Ti},
     ::K1,
@@ -135,18 +96,6 @@ function Tulip.KKT.setup(
     )
 end
 
-"""
-    Tulip.KKT.update!(kkt, θ, regP, regD)
-
-Updates the KKT system with new scaling and regularization terms. This function
-reconstructs the KKT matrix and performs a numerical factorization using CHOLMOD.
-
-# Arguments
-- `kkt::Solver{Tv,Ti}`: The KKT solver instance to update.
-- `θ::AbstractVector{Tv}`: New diagonal scaling terms.
-- `regP::AbstractVector{Tv}`: New primal regularization terms.
-- `regD::AbstractVector{Tv}`: New dual regularization terms.
-"""
 function Tulip.KKT.update!(
     kkt::Solver{Tv,Ti},
     θ::AbstractVector{Tv},
@@ -172,18 +121,6 @@ function Tulip.KKT.update!(
     return nothing
 end
 
-"""
-    Tulip.KKT.solve!(dx, dy, kkt, ξp, ξd)
-
-Solves the KKT system for `dx` and `dy` using the CHOLMOD factorization.
-
-# Arguments
-- `dx::AbstractVector{Tv}`: Output vector for primal step.
-- `dy::AbstractVector{Tv}`: Output vector for dual step.
-- `kkt::Solver{Tv,Ti}`: The KKT solver instance.
-- `ξp::AbstractVector{Tv}`: Primal right-hand side vector.
-- `ξd::AbstractVector{Tv}`: Dual right-hand side vector.
-"""
 function Tulip.KKT.solve!(
     dx::AbstractVector{Tv},
     dy::AbstractVector{Tv},
@@ -220,23 +157,163 @@ end
 
 end # module CholmodKKT
 
+"""
+Module LDLKKT
+
+This submodule implements a custom KKT solver backend using LDLFactorizations.jl.
+This pure Julia implementation is used as a fallback for high-precision float types
+not supported by CHOLMOD.
+"""
+module LDLKKT
+
+using Tulip
+using SparseArrays
+using LinearAlgebra
+using LDLFactorizations
+
+using SparseArrays: AbstractSparseMatrix
+using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
+
+Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend end
+
+Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
+    # Problem data
+    m::Ti
+    n::Ti
+    A::AbstractSparseMatrix{Tv,Ti}
+
+    # Workspace
+    θ::Vector{Tv} # Diagonal scaling
+    regP::Vector{Tv} # Primal regularization
+    regD::Vector{Tv} # Dual regularization
+    K::SparseMatrixCSC{Tv,Ti} # KKT matrix
+    ξ::Vector{Tv} # RHS of KKT system
+
+    # LDL Factorization
+    ldl_factor::LDLFactorizations.LDLFactorization{Tv,Ti}
+
+    # Solution quality
+    ipm_iter::Int
+    solve_in_iter::Int
+    residual_history::Vector{Tuple{Int,Int,Tv,Tv}}
+end
+
+Tulip.KKT.backend(::Solver) = "CustomLDLKKT"
+Tulip.KKT.linear_system(::Solver) = "Normal equations (K1)"
+
+function Tulip.KKT.setup(
+    A::AbstractSparseMatrix{Tv,Ti},
+    ::K1,
+    bk::Backend,
+) where {Tv<:Number,Ti<:Integer}
+    local m, n = size(A)
+
+    local θ = ones(Tv, n)
+    local regP = ones(Tv, n)
+    local regD = ones(Tv, m)
+    local ξ = zeros(Tv, m)
+    local K = sparse(A * A') + spdiagm(0 => regD)
+
+    local ldl_factor = ldl(Symmetric(K))
+
+    return Solver{Tv,Ti}(
+        m,
+        n,
+        A,
+        θ,
+        regP,
+        regD,
+        K,
+        ξ,
+        ldl_factor,
+        0,
+        0,
+        Tuple{Int,Int,Tv,Tv}[],
+    )
+end
+
+function Tulip.KKT.update!(
+    kkt::Solver{Tv,Ti},
+    θ::AbstractVector{Tv},
+    regP::AbstractVector{Tv},
+    regD::AbstractVector{Tv},
+) where {Tv<:Number,Ti<:Integer}
+    local m, n = kkt.m, kkt.n
+
+    kkt.ipm_iter += 1
+    kkt.solve_in_iter = 0
+
+    copyto!(kkt.θ, θ)
+    copyto!(kkt.regP, regP)
+    copyto!(kkt.regD, regD)
+
+    # Form normal equations matrix
+    local D = spdiagm(one(Tv) ./ (kkt.θ .+ kkt.regP))
+    kkt.K = (kkt.A * D * kkt.A') + spdiagm(0 => kkt.regD)
+
+    ldl_factorize!(Symmetric(kkt.K), kkt.ldl_factor)
+
+    return nothing
+end
+
+function Tulip.KKT.solve!(
+    dx::AbstractVector{Tv},
+    dy::AbstractVector{Tv},
+    kkt::Solver{Tv,Ti},
+    ξp::AbstractVector{Tv},
+    ξd::AbstractVector{Tv},
+) where {Tv<:Number,Ti<:Integer}
+    kkt.solve_in_iter += 1
+
+    local d = one(Tv) ./ (kkt.θ .+ kkt.regP)
+    copyto!(kkt.ξ, ξp)
+    mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
+
+    # Solve normal equations
+    dy .= kkt.ldl_factor \ kkt.ξ
+
+    # Compute relative residual norm
+    local absolute_residual_norm = norm(kkt.K * dy - kkt.ξ)
+    local rhs_norm = norm(kkt.ξ)
+    local relative_residual_norm =
+        (rhs_norm == 0) ? absolute_residual_norm : absolute_residual_norm / rhs_norm
+    push!(
+        kkt.residual_history,
+        (kkt.ipm_iter, kkt.solve_in_iter, relative_residual_norm, absolute_residual_norm),
+    )
+
+    # Recover dx
+    copyto!(dx, ξd)
+    mul!(dx, kkt.A', dy, 1.0, -1.0)
+    dx .*= d
+
+    return nothing
+end
+
+end # module LDLKKT
+
+
 include("common.jl")
 using .SolverCommon
+
 
 """
     construct_tulip_model(netw::Dimacs.McfpNet, ::Type{Tv}, config::Dict)
 
-Constructs a Tulip.jl model configured to use the CHOLMOD KKT solver.
-This function sets up the problem and applies solver-specific parameters from the configuration.
+Constructs a Tulip.jl model, automatically selecting the appropriate KKT backend
+based on the floating-point precision `Tv`.
+
+For `Float32` and `Float64`, it uses the high-performance `CholmodKKT` backend.
+For other types (e.g., `Float128`, `MultiFloat`), it falls back to the pure Julia
+`LDLKKT` backend.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The DIMACS MCFP network data.
-- `Tv::Type`: The numeric type to use for the model (e.g., `Float64`).
-- `config::Dict`: A dictionary containing solver-specific configurations,
-  including `cholmod_parameters` for `nested_dissection`.
+- `Tv::Type`: The numeric type to use for the model.
+- `config::Dict`: A dictionary containing solver-specific configurations.
 
 # Returns
-- A `Tulip.Model{Tv}` instance ready for optimization with the CHOLMOD backend.
+- A `Tulip.Model{Tv}` instance ready for optimization.
 """
 function construct_tulip_model(
     netw::Dimacs.McfpNet,
@@ -249,13 +326,17 @@ function construct_tulip_model(
     Tulip.set_parameter(lp, "Presolve_Level", 0)
     Tulip.set_parameter(lp, "KKT_System", Tulip.KKT.K1())
 
-    cholmod_params = get(config, "cholmod_parameters", Dict())
-    nested_dissection = get(cholmod_params, "NestedDissection", false)
-    Tulip.set_parameter(
-        lp,
-        "KKT_Backend",
-        CholmodKKT.Backend{Tv}(nested_dissection = nested_dissection),
-    )
+    if Tv in [Float32, Float64]
+        cholmod_params = get(config, "cholmod_parameters", Dict())
+        nested_dissection = get(cholmod_params, "NestedDissection", false)
+        Tulip.set_parameter(
+            lp,
+            "KKT_Backend",
+            CholmodKKT.Backend{Tv}(nested_dissection = nested_dissection),
+        )
+    else
+        Tulip.set_parameter(lp, "KKT_Backend", LDLKKT.Backend{Tv}())
+    end
 
     params = get(config, "parameters", Dict())
     # Explicitly set parameters, ensuring correct types
@@ -269,8 +350,9 @@ function construct_tulip_model(
     return lp
 end
 
-"""
-    solve(netw::Dimacs.McfpNet, config::Dict)
+function solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number} = Float64)
+    """
+    solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number})
 
 Solves a Minimum Cost Flow Problem (MCFP) using the TulipCHOLMOD solver.
 This function constructs the Tulip model, optimizes it, and returns detailed
@@ -278,8 +360,8 @@ solver statistics.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The minimum cost flow problem to solve.
-- `config::Dict`: A dictionary with the solver configuration, including parameters
-  for CHOLMOD and general Tulip settings.
+- `config::Dict`: A dictionary with the solver configuration.
+- `float_type::Type{<:Number}`: The floating-point type to use for the solver.
 
 # Returns
 - A named tuple containing:
@@ -287,10 +369,10 @@ solver statistics.
   - `iters`: The number of Interior Point Method iterations.
   - `seconds`: The total solution time in seconds.
   - `solution`: The optimal solution vector `x`.
+  - `objective_value`: The objective value of the solution.
   - `residual_history`: A history of residual norms during the optimization.
 """
-function solve(netw::Dimacs.McfpNet, config::Dict)
-    lp = construct_tulip_model(netw, Float64, config)
+    lp = construct_tulip_model(netw, float_type, config)
     Tulip.optimize!(lp)
 
     status = Tulip.get_attribute(lp, Tulip.Status())

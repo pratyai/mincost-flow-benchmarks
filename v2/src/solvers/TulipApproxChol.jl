@@ -73,7 +73,8 @@ workspace variables, and solution quality metrics for the KKT system.
 - `sddm_solve::Function`: Function to solve the SDDM system, yielding `dy`.
 - `ipm_iter::Int`: Current Interior Point Method iteration count.
 - `solve_in_iter::Int`: Counter for solves within the current IPM iteration.
-- `residual_history::Vector{Tuple{Int, Int, Tv}}`: History of residual norms.
+- `residual_history::Vector{Tuple{Int, Int, Tv, Tv}}`: History of residual norms.
+- `pcg_iterations_history::Vector{Int}`: History of PCG iterations for each solve.
 """
 Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{Tv}
     # Problem data
@@ -349,7 +350,7 @@ function construct_tulip_model(
 end
 
 """
-    solve(netw::Dimacs.McfpNet, config::Dict)
+    solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number})
 
 Solves a Minimum Cost Flow Problem (MCFP) using the TulipApproxChol solver.
 This function constructs the Tulip model, optimizes it, and returns detailed
@@ -357,8 +358,8 @@ solver statistics.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The minimum cost flow problem to solve.
-- `config::Dict`: A dictionary with the solver configuration, including parameters
-  for the approximate Cholesky factorization and general Tulip settings.
+- `config::Dict`: A dictionary with the solver configuration.
+- `float_type::Type{<:Number}`: The floating-point type to use for the solver.
 
 # Returns
 - A named tuple containing:
@@ -366,13 +367,15 @@ solver statistics.
   - `iters`: The number of Interior Point Method iterations.
   - `seconds`: The total solution time in seconds.
   - `solution`: The optimal solution vector `x`.
+  - `objective_value`: The objective value of the solution.
   - `fact_s`: Factorization time in seconds.
   - `solv_s`: KKT system solve time in seconds.
   - `sddm_calls`: Number of SDDM solver calls.
   - `residual_history`: A history of residual norms during the optimization.
+  - `pcg_iterations_history`: A history of PCG iterations for each solve.
 """
-function solve(netw::Dimacs.McfpNet, config::Dict)
-    lp = construct_tulip_model(netw, Float64, config)
+function solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number} = Float64)
+    lp = construct_tulip_model(netw, float_type, config)
     Tulip.optimize!(lp)
 
     status = Tulip.get_attribute(lp, Tulip.Status())

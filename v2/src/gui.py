@@ -160,7 +160,11 @@ class MinCostFlowGUI(QWidget):
         self.setLayout(main_layout)
 
     def _create_input_row(
-        self, label_text, browse_func, button_text="Browse", placeholder_text=None
+        self,
+        label_text,
+        browse_func,
+        button_text="Browse",
+        placeholder_text=None,
     ):
         h_layout = QHBoxLayout()
         label = QLabel(label_text)
@@ -186,7 +190,9 @@ class MinCostFlowGUI(QWidget):
     def browse_directory(self, line_edit):
         initial_path = line_edit.text() if line_edit.text() else os.getcwd()
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Directory", initial_path
+            self,
+            "Select Directory",
+            initial_path,
         )
         if dir_path:
             line_edit.setText(dir_path)
@@ -204,7 +210,9 @@ class MinCostFlowGUI(QWidget):
 
     def add_input_spec_file_to_list(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Add Input Spec File", self.last_input_spec_dir
+            self,
+            "Add Input Spec File",
+            self.last_input_spec_dir,
         )
         if file_path:
             if file_path not in [
@@ -223,7 +231,8 @@ class MinCostFlowGUI(QWidget):
 
     def _load_default_configs(self):
         default_config_path = os.path.join(
-            JULIA_PROJECT_PATH, DEFAULT_CONFIG_DIR_RELATIVE
+            JULIA_PROJECT_PATH,
+            DEFAULT_CONFIG_DIR_RELATIVE,
         )
         if os.path.isdir(default_config_path):
             for root, _, files in os.walk(default_config_path):
@@ -241,7 +250,9 @@ class MinCostFlowGUI(QWidget):
 
     def add_config_file_to_list(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Add Config File", self.last_config_dir
+            self,
+            "Add Config File",
+            self.last_config_dir,
         )
         if file_path:
             if file_path not in [

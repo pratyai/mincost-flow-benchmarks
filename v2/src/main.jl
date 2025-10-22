@@ -7,7 +7,7 @@ executes various solvers on specified problem instances, and records the results
 
 The script supports:
 - Specifying input problem files (`.inspec`).
-- Defining solver configurations via TOML files.
+- Defining solver configurations via TOML files, including floating-point precision.
 - Storing benchmark results in an SQLite database.
 - Optionally saving solution flow vectors.
 - Automatically calculating true optimal values using an external DIMACS solver.
@@ -21,6 +21,8 @@ using TOML
 using Debugger
 using GZip
 using Base.Threads # For multi-threading
+using Quadmath
+using MultiFloats
 
 using Dimacs
 
@@ -30,6 +32,9 @@ include("solvers/TulipApproxChol.jl")
 include("solvers/TulipCHOLMOD.jl")
 
 const SOLVERS = Dict("tulip_approxchol" => TulipApproxChol, "tulip_cholmod" => TulipCHOLMOD)
+const SUPPORTED_FLOAT_TYPES =
+    Dict("Float64" => Float64, "Float128" => Float128, "Float64x2" => Float64x2)
+
 
 """
     parse_cmdargs() -> Dict
@@ -37,12 +42,12 @@ const SOLVERS = Dict("tulip_approxchol" => TulipApproxChol, "tulip_cholmod" => T
 Parses command-line arguments for the benchmark runner.
 
 # Arguments
-- `-i, --input-spec-files`: Path(s) to input spec file(s) (required).
-- `-o, --output-db`: Path to store the output database. If absent, a database
+- `-i`: Path(s) to input spec file(s) (required).
+- `-o`: Path to store the output database. If absent, a database
   named after the spec file will be created for each spec.
-- `-s, --solution-dir`: Directory to store solution flow-vectors. If absent,
+- `-s`: Directory to store solution flow-vectors. If absent,
   solutions will not be stored.
-- `--configs`: Path(s) to solver configuration files (required).
+- `-c`: Path(s) to solver configuration files (required).
 
 # Returns
 - A `Dict` containing the parsed command-line arguments.
@@ -56,21 +61,25 @@ function parse_cmdargs()
         action = :append_arg
         default = String[]
         required = true
+        dest_name = "input_spec_files"
         "-o"
         help = "path to store the output database (if absent, will use spec_name.db for each spec)"
         arg_type = Union{Nothing,String}
         default = nothing
+        dest_name = "output_db"
         "-s"
         help = "output solution flow-vectors directory (if absent, will not store solutions)"
         arg_type = Union{Nothing,String}
         required = false
         default = nothing
+        dest_name = "solution_dir"
         "-c"
         help = "paths to solver config files"
         arg_type = String
         action = :append_arg
         default = String[]
         required = true
+        dest_name = "config_files"
     end
     return parse_args(s)
 end
@@ -107,6 +116,7 @@ function setup_database_schema(db::SQLite.DB)
       id INTEGER PRIMARY KEY,
       config_text TEXT UNIQUE,
       solver_name TEXT,
+      precision TEXT,
       ipm_preg_min REAL,
       ipm_dreg_min REAL,
       ipm_iterations_limit INTEGER,
@@ -413,6 +423,11 @@ function process_single_spec(
         # Extract cholmod specific parameters
         cholmod_params = get(config, "cholmod_parameters", Dict())
         cholmod_nested_dissection = get(cholmod_params, "NestedDissection", missing)
+        float_type_str = get(config, "precision", "Float64")
+        if !haskey(SUPPORTED_FLOAT_TYPES, float_type_str)
+            error("Unsupported float type: $float_type_str")
+        end
+        float_type = SUPPORTED_FLOAT_TYPES[float_type_str]
 
         query = DBInterface.execute(
             db,
@@ -429,14 +444,15 @@ function process_single_spec(
                 db,
                 """
     INSERT INTO configs (
-        config_text, solver_name, ipm_preg_min, ipm_dreg_min, ipm_iterations_limit,
+        config_text, solver_name, precision, ipm_preg_min, ipm_dreg_min, ipm_iterations_limit,
         pcg_maxits, pcg_tol, approxchol_type, approxchol_stag_test,
         approxchol_split, approxchol_merge, cholmod_nested_dissection
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """,
                 (
                     config_text,
                     solver_name,
+                    float_type_str,
                     ipm_preg_min,
                     ipm_dreg_min,
                     ipm_iterations_limit,
@@ -451,6 +467,7 @@ function process_single_spec(
             )
             config_id = SQLite.last_insert_rowid(db)
         end
+
         push!(
             parsed_configs,
             (
@@ -459,6 +476,7 @@ function process_single_spec(
                 solver_module = solver_module,
                 config_id = config_id,
                 solver_name = solver_name,
+                float_type = float_type,
             ),
         )
     end
@@ -495,6 +513,7 @@ function process_single_spec(
             solver_module = parsed_config.solver_module
             config_id = parsed_config.config_id
             solver_name = parsed_config.solver_name
+            float_type = parsed_config.float_type
 
             println("  with config: ", config_file)
 
@@ -515,7 +534,7 @@ function process_single_spec(
                 continue
             end
 
-            local results = solver_module.solve(netw, config)
+            local results = solver_module.solve(netw, config, float_type)
 
             # Save solution if asked for.
             local sol_file::Union{String,Missing} = missing
@@ -543,7 +562,7 @@ function process_single_spec(
                 db,
                 """
   INSERT INTO runs (name, status, solver_name, config_id, problem_id, time_s, iters, solution_file, fact_s, solv_s, sddm_calls, optimal_value)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """,
                 (
                     r[:name],
@@ -605,11 +624,11 @@ for each spec.
 """
 function run_benchmarks(args::Dict)
 
-    local config_files = args["c"]
+    local config_files = args["config_files"]
 
-    local input_specs = args["i"]
-    local output_db_arg = args["o"]
-    local solution_dir = args["s"]
+    local input_specs = args["input_spec_files"]
+    local output_db_arg = args["output_db"]
+    local solution_dir = args["solution_dir"]
 
     local all_lemon_tasks = [] # Collect all lemon solver tasks
 
