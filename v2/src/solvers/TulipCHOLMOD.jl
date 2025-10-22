@@ -3,7 +3,7 @@ Module TulipCHOLMOD
 
 This module defines a meta-solver that uses a custom KKT solver based on CHOLMOD
 for standard floating-point types (`Float32`, `Float64`) and automatically falls back
-to a pure Julia LDL factorization for higher-precision types.
+to a pure Julia Cholesky factorization from `CliqueTrees.jl` for higher-precision types.
 """
 module TulipCHOLMOD
 
@@ -13,13 +13,13 @@ using SparseArrays
 using LinearAlgebra
 using Random
 using SuiteSparse
-using LDLFactorizations
+using CliqueTrees
 
 """
 Module CholmodKKT
 
 This submodule implements a custom KKT solver backend using CHOLMOD for solving
-the normal equations system within Tulip.jl's interior-point method. It's adapted
+the normal equations system within Tulip.jl's interior-point method. It is adapted
 from Tulip.jl's internal implementation to allow for specific CHOLMOD configurations.
 This backend is only used for `Float32` and `Float64` due to CHOLMOD's limitations.
 """
@@ -158,18 +158,18 @@ end
 end # module CholmodKKT
 
 """
-Module LDLKKT
+Module CliqueTreeKKT
 
-This submodule implements a custom KKT solver backend using LDLFactorizations.jl.
+This submodule implements a custom KKT solver backend using CliqueTrees.jl.
 This pure Julia implementation is used as a fallback for high-precision float types
 not supported by CHOLMOD.
 """
-module LDLKKT
+module CliqueTreeKKT
 
 using Tulip
 using SparseArrays
 using LinearAlgebra
-using LDLFactorizations
+using CliqueTrees
 
 using SparseArrays: AbstractSparseMatrix
 using Tulip.KKT: AbstractKKTBackend, AbstractKKTSolver, K1
@@ -189,8 +189,8 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
     K::SparseMatrixCSC{Tv,Ti} # KKT matrix
     ξ::Vector{Tv} # RHS of KKT system
 
-    # LDL Factorization
-    ldl_factor::LDLFactorizations.LDLFactorization{Tv,Ti}
+    # Cholesky Factorization
+    chol_factor::CliqueTrees.CholFact{Tv,Ti}
 
     # Solution quality
     ipm_iter::Int
@@ -198,7 +198,7 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
     residual_history::Vector{Tuple{Int,Int,Tv,Tv}}
 end
 
-Tulip.KKT.backend(::Solver) = "CustomLDLKKT"
+Tulip.KKT.backend(::Solver) = "CliqueTreeKKT"
 Tulip.KKT.linear_system(::Solver) = "Normal equations (K1)"
 
 function Tulip.KKT.setup(
@@ -214,7 +214,7 @@ function Tulip.KKT.setup(
     local ξ = zeros(Tv, m)
     local K = sparse(A * A') + spdiagm(0 => regD)
 
-    local ldl_factor = ldl(Symmetric(K))
+    local chol_factor = CliqueTrees.cholesky(Symmetric(K))
 
     return Solver{Tv,Ti}(
         m,
@@ -225,7 +225,7 @@ function Tulip.KKT.setup(
         regD,
         K,
         ξ,
-        ldl_factor,
+        chol_factor,
         0,
         0,
         Tuple{Int,Int,Tv,Tv}[],
@@ -251,7 +251,8 @@ function Tulip.KKT.update!(
     local D = spdiagm(one(Tv) ./ (kkt.θ .+ kkt.regP))
     kkt.K = (kkt.A * D * kkt.A') + spdiagm(0 => kkt.regD)
 
-    ldl_factorize!(Symmetric(kkt.K), kkt.ldl_factor)
+    # Re-factorize the matrix. CliqueTrees.jl doesn't have an in-place update.
+    kkt.chol_factor = CliqueTrees.cholesky(Symmetric(kkt.K))
 
     return nothing
 end
@@ -270,7 +271,7 @@ function Tulip.KKT.solve!(
     mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
 
     # Solve normal equations
-    dy .= kkt.ldl_factor \ kkt.ξ
+    dy .= kkt.chol_factor \ kkt.ξ
 
     # Compute relative residual norm
     local absolute_residual_norm = norm(kkt.K * dy - kkt.ξ)
@@ -290,7 +291,7 @@ function Tulip.KKT.solve!(
     return nothing
 end
 
-end # module LDLKKT
+end # module CliqueTreeKKT
 
 
 include("common.jl")
@@ -305,7 +306,7 @@ based on the floating-point precision `Tv`.
 
 For `Float32` and `Float64`, it uses the high-performance `CholmodKKT` backend.
 For other types (e.g., `Float128`, `MultiFloat`), it falls back to the pure Julia
-`LDLKKT` backend.
+`CliqueTreeKKT` backend.
 
 # Arguments
 - `netw::Dimacs.McfpNet`: The DIMACS MCFP network data.
@@ -335,7 +336,7 @@ function construct_tulip_model(
             CholmodKKT.Backend{Tv}(nested_dissection = nested_dissection),
         )
     else
-        Tulip.set_parameter(lp, "KKT_Backend", LDLKKT.Backend{Tv}())
+        Tulip.set_parameter(lp, "KKT_Backend", CliqueTreeKKT.Backend{Tv}())
     end
 
     params = get(config, "parameters", Dict())
@@ -350,8 +351,7 @@ function construct_tulip_model(
     return lp
 end
 
-function solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number} = Float64)
-    """
+"""
     solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number})
 
 Solves a Minimum Cost Flow Problem (MCFP) using the TulipCHOLMOD solver.
@@ -372,6 +372,7 @@ solver statistics.
   - `objective_value`: The objective value of the solution.
   - `residual_history`: A history of residual norms during the optimization.
 """
+function solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number} = Float64)
     lp = construct_tulip_model(netw, float_type, config)
     Tulip.optimize!(lp)
 
