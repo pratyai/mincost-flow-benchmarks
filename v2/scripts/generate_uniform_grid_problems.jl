@@ -15,7 +15,10 @@ using .GridGraphs
 
 # --- Configuration ---
 h_fixed = 5
-w_values = round.(Int, 10 .^ (range(log10(5), stop = log10(1_000_000), length = 20)))
+w_values = vcat(
+    round.(Int, 10 .^ (range(log10(1_000), stop = log10(200_000), length = 20))),
+    [300_000, 400_000, 500_000],
+)
 
 problems_dir = "data/problems/unifwidegrid"
 specs_dir = "data/specs"
