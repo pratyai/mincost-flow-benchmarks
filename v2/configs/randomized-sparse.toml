@@ -1,0 +1,10 @@
+solver = "randomized_sparse"
+precision = "Float64"
+
+[parameters]
+max_rounds = 100
+steps_per_round = 5
+sample_size = 5000
+tau = 1e-2
+dual_tol = 1e-5
+verbose = true

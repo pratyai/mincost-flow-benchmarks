@@ -1,0 +1,7 @@
+solver = "ecos-py"
+precision = "Float64"
+verbose = true
+
+[parameters]
+verbose = true
+# feastol, abstol, reltol can be added here

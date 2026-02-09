@@ -23,6 +23,8 @@ using GZip
 using Base.Threads # For multi-threading
 using Quadmath
 using MultiFloats
+using REPL
+using REPL.TerminalMenus
 
 using Dimacs
 
@@ -30,11 +32,211 @@ using Dimacs
 include("solvers/common.jl")
 include("solvers/TulipApproxChol.jl")
 include("solvers/TulipCHOLMOD.jl")
+include("solvers/ECOSSolver.jl")
+include("solvers/MosekSolver.jl")
+include("solvers/GurobiSolver.jl")
+include("solvers/MehrotraSolver.jl")
+include("solvers/MehrotraApproxChol.jl")
+include("solvers/RandomizedSparseSolver.jl")
 
-const SOLVERS = Dict("tulip_approxchol" => TulipApproxChol, "tulip_cholmod" => TulipCHOLMOD)
+const SOLVERS = Dict(
+    "tulip_approxchol" => TulipApproxChol,
+    "tulip_cholmod" => TulipCHOLMOD,
+    "ecos" => ECOSSolver,
+    "mosek" => MosekSolver,
+    "gurobi" => GurobiSolver,
+    "mehrotra" => MehrotraSolver,
+    "mehrotra_approxchol" => MehrotraApproxChol,
+    "randomized_sparse" => RandomizedSparseSolver,
+)
 const SUPPORTED_FLOAT_TYPES =
     Dict("Float64" => Float64, "Float128" => Float128, "Float64x2" => Float64x2)
 
+# Custom MultiSelectMenu that uses Space for toggle and Enter for Done
+import REPL.TerminalMenus: AbstractMenu, keypress, header, options, pick, cancel, writeline, numoptions, config
+
+mutable struct SpaceMultiSelectMenu <: AbstractMenu
+    options::Vector{String}
+    pagesize::Int
+    pageoffset::Int
+    selected::Set{Int}
+    cursor::Int
+    config::TerminalMenus.Config
+end
+
+function SpaceMultiSelectMenu(options; pagesize=10, config=TerminalMenus.Config())
+    SpaceMultiSelectMenu(options, pagesize, 0, Set{Int}(), 1, config)
+end
+
+TerminalMenus.options(m::SpaceMultiSelectMenu) = m.options
+TerminalMenus.numoptions(m::SpaceMultiSelectMenu) = length(m.options)
+TerminalMenus.header(m::SpaceMultiSelectMenu) = "[press: Space=toggle, Enter=done, q=abort]"
+TerminalMenus.config(m::SpaceMultiSelectMenu) = m.config
+
+function TerminalMenus.writeline(buf::IO, m::SpaceMultiSelectMenu, idx::Int, iscursor::Bool)
+    if iscursor
+        m.cursor = idx
+    end
+    print(buf, iscursor ? "> " : "  ")
+    print(buf, idx in m.selected ? "[X] " : "[ ] ")
+    print(buf, m.options[idx])
+end
+
+function TerminalMenus.keypress(m::SpaceMultiSelectMenu, key::UInt32)
+    if key == UInt32(' ')
+        if m.cursor in m.selected
+            delete!(m.selected, m.cursor)
+        else
+            push!(m.selected, m.cursor)
+        end
+    elseif key == UInt32('\r')
+        return true
+    elseif key == UInt32('q')
+        empty!(m.selected)
+        return true
+    end
+    return false
+end
+
+TerminalMenus.pick(m::SpaceMultiSelectMenu, cursor::Int) = true
+TerminalMenus.cancel(m::SpaceMultiSelectMenu) = empty!(m.selected)
+
+
+"""
+    expand_and_select_configs(paths::Vector{String}) -> Vector{String}
+
+Expands directory paths to include all .toml files within them, and then presents
+an interactive menu for the user to select which configuration files to use.
+
+- Files explicitly passed in `paths` are selected by default.
+- Files found within passed directories are not selected by default.
+"""
+function expand_and_select_configs(paths::Vector{String})
+    if isempty(paths)
+        return String[]
+    end
+
+    # If no directory is passed, skip UI and run with provided files
+    if !any(isdir, paths)
+        return paths
+    end
+
+    selection_map = Dict{String, Bool}() # path -> is_selected
+    ordered_files = String[]
+    
+    for p in paths
+        if isdir(p)
+            # It's a directory: list all .toml files, default unselected
+            try
+                files = readdir(p, join=true)
+                for f in files
+                    if endswith(f, ".toml")
+                        if !haskey(selection_map, f)
+                            push!(ordered_files, f)
+                            selection_map[f] = false
+                        end
+                        # If already in map (e.g. from previous specific file arg), leave it as is
+                    end
+                end
+            catch e
+                @warn "Could not read directory $p: $e"
+            end
+        elseif isfile(p)
+            # It's a file: default selected
+            if !haskey(selection_map, p)
+                push!(ordered_files, p)
+                selection_map[p] = true
+            else
+                selection_map[p] = true # Ensure it's selected if it was previously unselected
+            end
+        else
+            @warn "Config path not found: $p"
+        end
+    end
+    
+    if isempty(ordered_files)
+        println("No configuration files found.")
+        return String[]
+    end
+
+    # Interactive selection using custom SpaceMultiSelectMenu
+    menu = SpaceMultiSelectMenu(ordered_files; pagesize=20, config=TerminalMenus.Config(scroll_wrap=true))
+    for (i, f) in enumerate(ordered_files)
+        if selection_map[f]
+            push!(menu.selected, i)
+        end
+    end
+
+    request("Select configuration files:", menu)
+    
+    # Use menu.selected directly
+    indices = collect(menu.selected)
+    if isempty(indices)
+        return String[]
+    end
+    
+    return ordered_files[indices]
+end
+
+"""
+    expand_and_select_inspecs(paths::Vector{String}) -> Vector{String}
+
+Processes input spec paths. If any path is a directory, it lists all .inspec files
+within all provided paths (explicit files + directory contents) and asks the user
+to select EXTREMELY ONE file to run.
+
+- If no directory is provided (only explicit files), it returns them as-is (no menu).
+- If a directory is provided, a RadioMenu is shown to enforce single selection.
+"""
+function expand_and_select_inspecs(paths::Vector{String})
+    # Check if any path is a directory
+    has_dir = any(isdir, paths)
+    
+    if !has_dir
+        return paths # No interaction needed, just run what was given
+    end
+
+    # Gather all candidates
+    candidates = String[]
+    for p in paths
+        if isdir(p)
+             try
+                files = readdir(p, join=true)
+                for f in files
+                    if endswith(f, ".inspec")
+                        push!(candidates, f)
+                    end
+                end
+            catch e
+                @warn "Could not read directory $p: $e"
+            end
+        elseif isfile(p)
+            push!(candidates, p)
+        end
+    end
+    
+    unique!(candidates)
+
+    if isempty(candidates)
+         println("No .inspec files found.")
+         return String[]
+    end
+    
+    # Sort for niceness
+    sort!(candidates)
+    
+    # RadioMenu for single selection
+    println("\nDirectory detected in input specs. Please select ONE input spec file:")
+    menu = RadioMenu(candidates; pagesize=20, scroll_wrap=true)
+    choice = request("Select input spec file:", menu)
+    
+    if choice == -1
+        println("Selection cancelled.")
+        return String[]
+    end
+    
+    return [candidates[choice]]
+end
 
 """
     parse_cmdargs() -> Dict
@@ -56,11 +258,11 @@ function parse_cmdargs()
     s = ArgParseSettings()
     @add_arg_table s begin
         "-i"
-        help = "input spec file(s)"
+        help = "input spec file(s) (default: data/specs/)"
         arg_type = String
         action = :append_arg
         default = String[]
-        required = true
+        required = false
         dest_name = "input_spec_files"
         "-o"
         help = "path to store the output database (if absent, will use spec_name.db for each spec)"
@@ -74,12 +276,16 @@ function parse_cmdargs()
         default = nothing
         dest_name = "solution_dir"
         "-c"
-        help = "paths to solver config files"
+        help = "paths to solver config files (default: configs/)"
         arg_type = String
         action = :append_arg
         default = String[]
-        required = true
+        required = false
         dest_name = "config_files"
+        "--run-true-optimal"
+        help = "run external DIMACS solver to calculate true optimal values"
+        action = :store_true
+        dest_name = "run_true_optimal"
     end
     return parse_args(s)
 end
@@ -94,6 +300,10 @@ Tables include `problems`, `configs`, `runs`, and `solver_history`.
 - `db::SQLite.DB`: An opened SQLite database connection.
 """
 function setup_database_schema(db::SQLite.DB)
+    # Enable WAL mode and set busy timeout for better concurrency
+    SQLite.execute(db, "PRAGMA busy_timeout = 30000;")
+    SQLite.execute(db, "PRAGMA journal_mode = WAL;")
+
     SQLite.execute(
         db,
         """
@@ -260,7 +470,7 @@ function get_true_optimal_value(dimacs_solver_path::String, indimacs_file::Strin
 end
 
 """
-    process_single_spec(input_spec_file::String, output_db_path::String, solution_dir::Union{Nothing,String}, config_files::Vector{String})
+    process_single_spec(input_spec_file::String, output_db_path::String, solution_dir::Union{Nothing,String}, config_files::Vector{String}, run_true_optimal::Bool)
 
 Processes a single input spec file, running benchmarks for each problem and solver
 configuration, and storing the results in the specified SQLite database.
@@ -270,12 +480,14 @@ configuration, and storing the results in the specified SQLite database.
 - `output_db_path::String`: Path to the SQLite database where results will be stored.
 - `solution_dir::Union{Nothing,String}`: Optional directory to save solution flow-vectors.
 - `config_files::Vector{String}`: A list of paths to solver configuration files.
+- `run_true_optimal::Bool`: Whether to run the external DIMACS solver.
 """
 function process_single_spec(
     input_spec_file::String,
     output_db_path::String,
     solution_dir::Union{Nothing,String},
     config_files::Vector{String},
+    run_true_optimal::Bool,
 )
     local probspec = CSV.read(input_spec_file, DataFrame)
 
@@ -347,7 +559,7 @@ function process_single_spec(
             )
         end
 
-        if ismissing(existing_true_optimal) || ismissing(existing_lemon_time_s)
+        if run_true_optimal && (ismissing(existing_true_optimal) || ismissing(existing_lemon_time_s))
             # Put the problem into the channel for the background solver
             put!(problem_channel, (r[:name], problem_id, indimacs))
             problems_to_solve_in_bg = true
@@ -480,22 +692,27 @@ function process_single_spec(
             ),
         )
     end
+
+    is_warmup = occursin("warmup", basename(input_spec_file))
+
     # --- Pass 3: Run benchmarks, skipping problems if all runs exist ---
     for r in eachrow(probspec)
         local current_problem_id = problem_ids[r[:name]]
         local indimacs::String = joinpath(dirname(Base.@__DIR__), r[:input_file])
 
         # Check if all runs for this problem already exist
-        should_skip_problem = true
-        for parsed_config in parsed_configs
-            query = DBInterface.execute(
-                db,
-                "SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
-                (r[:name], parsed_config.config_id, current_problem_id),
-            )
-            if isempty(query)
-                should_skip_problem = false
-                break # Found at least one missing run, so don't skip this problem
+        should_skip_problem = !is_warmup
+        if should_skip_problem
+            for parsed_config in parsed_configs
+                query = DBInterface.execute(
+                    db,
+                    "SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
+                    (r[:name], parsed_config.config_id, current_problem_id),
+                )
+                if isempty(query)
+                    should_skip_problem = false
+                    break # Found at least one missing run, so don't skip this problem
+                end
             end
         end
 
@@ -518,20 +735,32 @@ function process_single_spec(
             println("  with config: ", config_file)
 
             # Check if result already exists (this check is still needed for individual runs)
-            query = DBInterface.execute(
-                db,
-                "SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
-                (r[:name], config_id, current_problem_id),
-            )
-            if !isempty(query)
-                println(
-                    "  record already exists for `",
-                    r[:name],
-                    "` with config from `",
-                    config_file,
-                    "`; skipping it",
+            if !is_warmup
+                query = DBInterface.execute(
+                    db,
+                    "SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
+                    (r[:name], config_id, current_problem_id),
                 )
-                continue
+                if !isempty(query)
+                    println(
+                        "  record already exists for `",
+                        r[:name],
+                        "` with config from `",
+                        config_file,
+                        "`; skipping it",
+                    )
+                    continue
+                end
+            else
+                # If warmup, clear previous results for this run to avoid duplicates and ensure fresh data
+                DBInterface.execute(db, 
+                    "DELETE FROM solver_history WHERE run_id IN (SELECT id FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?)",
+                    (r[:name], config_id, current_problem_id)
+                )
+                DBInterface.execute(db,
+                    "DELETE FROM runs WHERE name = ? AND config_id = ? AND problem_id = ?",
+                    (r[:name], config_id, current_problem_id)
+                )
             end
 
             local results = solver_module.solve(netw, config, float_type)
@@ -629,6 +858,7 @@ function run_benchmarks(args::Dict)
     local input_specs = args["input_spec_files"]
     local output_db_arg = args["output_db"]
     local solution_dir = args["solution_dir"]
+    local run_true_optimal = args["run_true_optimal"]
 
     local all_lemon_tasks = [] # Collect all lemon solver tasks
 
@@ -645,6 +875,7 @@ function run_benchmarks(args::Dict)
                 output_db_name,
                 solution_dir,
                 config_files,
+                run_true_optimal,
             )
             if lemon_task !== nothing
                 push!(all_lemon_tasks, lemon_task)
@@ -661,6 +892,7 @@ function run_benchmarks(args::Dict)
                 output_db_arg,
                 solution_dir,
                 config_files,
+                run_true_optimal,
             )
             if lemon_task !== nothing
                 push!(all_lemon_tasks, lemon_task)
@@ -676,7 +908,54 @@ end
 
 function main()
     local args = parse_cmdargs()
+    
+    # Set default directories if none provided
+    root_dir = dirname(Base.@__DIR__)
+    if isempty(args["input_spec_files"])
+        push!(args["input_spec_files"], joinpath(root_dir, "data", "specs"))
+    end
+    if isempty(args["config_files"])
+        push!(args["config_files"], joinpath(root_dir, "configs"))
+    end
+    
+    # Interactive input spec selection
+    if haskey(args, "input_spec_files")
+        args["input_spec_files"] = expand_and_select_inspecs(args["input_spec_files"])
+    end
+
+    if isempty(args["input_spec_files"])
+        println("No input spec files selected. Exiting.")
+        return
+    end
+    
+    # Interactive config selection
+    if haskey(args, "config_files")
+        args["config_files"] = expand_and_select_configs(args["config_files"])
+    end
+
+    if isempty(args["config_files"])
+        println("No configuration files selected. Exiting.")
+        return
+    end
+
     @show args
+
+    # Print reproduction command
+    repro_cmd = "julia --project=. $(relpath(PROGRAM_FILE))"
+    for spec in args["input_spec_files"]
+        repro_cmd *= " -i \"$(spec)\""
+    end
+    for config in args["config_files"]
+        repro_cmd *= " -c \"$(config)\""
+    end
+    if !isnothing(args["output_db"])
+        repro_cmd *= " -o \"$(args["output_db"])\""
+    end
+    if !isnothing(args["solution_dir"])
+        repro_cmd *= " -s \"$(args["solution_dir"])\""
+    end
+    println("\nTo reproduce this run, use:")
+    println(repro_cmd, "\n")
 
     # Run benchmarks with the parsed arguments
     run_benchmarks(args)

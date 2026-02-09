@@ -1,0 +1,16 @@
+solver = "mehrotra_approxchol"
+precision = "Float64"
+
+[kustom_parameters]
+pcg_maxits = 100
+pcg_tol = 5e-8
+
+[kustom_parameters.ApproxCholParams]
+type = "deg"
+stag_test = 0
+split = 2
+merge = 2
+
+[parameters]
+max_iter = 100
+tol = 1e-8

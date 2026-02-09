@@ -1,0 +1,16 @@
+{
+    "input_specs": [
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/data/specs/lemon_gridwide.inspec"
+    ],
+    "configs": [
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/configs/approxchol-f64x2.toml",
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/configs/approxchol-f128.toml",
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/configs/cholmod-f64x2.toml",
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/configs/approxchol-f64.toml",
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/configs/cholmod-f128.toml",
+        "/Users/pmz/gitspace/mincost-flow-benchmarks/v2/configs/cholmod-f64.toml"
+    ],
+    "output_db": "",
+    "solution_dir": "",
+    "problem_selections": {}
+}

@@ -46,11 +46,13 @@ Backend for the custom approximate Cholesky KKT solver.
   controlling aspects like ordering strategy, edge splitting, and merging.
 - `pcg_tol::Tv`: Tolerance for the Preconditioned Conjugate Gradient (PCG) solver
   used within the approximate Cholesky factorization.
+- `red_black::Bool`: Whether to use Independent Set (Red-Black) KKT reduction.
 """
 Base.@kwdef struct Backend{Tv<:Number} <: AbstractKKTBackend
     params::ApproxCholParams = ApproxCholParams(:deg, 0, 2, 2)
     pcg_maxits::Int = 100
     pcg_tol::Tv = 5e-8
+    red_black::Bool = false
 end
 
 """
@@ -68,8 +70,8 @@ workspace variables, and solution quality metrics for the KKT system.
 - `θ::Vector{Tv}`: Diagonal scaling vector.
 - `regP::Vector{Tv}`: Primal regularization vector.
 - `regD::Vector{Tv}`: Dual regularization vector.
-- `K::SparseMatrixCSC{Tv,Ti}`: The KKT matrix.
-- `ξ::Vector{Tv}`: Right-hand side vector of the KKT system.
+- `K::SparseMatrixCSC{Tv,Ti}`: The KKT matrix (reduced if red_black enabled).
+- `ξ::Vector{Tv}`: Right-hand side vector of the KKT system (reduced if red_black enabled).
 - `sddm_solve::Function`: Function to solve the SDDM system, yielding `dy`.
 - `ipm_iter::Int`: Current Interior Point Method iteration count.
 - `solve_in_iter::Int`: Counter for solves within the current IPM iteration.
@@ -94,6 +96,11 @@ Base.@kwdef mutable struct Solver{Tv<:Number,Ti<:Integer} <: AbstractKKTSolver{T
     ξ::Vector{Tv} # RHS of KKT system
     # Laplacians related
     sddm_solve::Function  # Solver for the SDDM system that yields `dy`
+
+    # Red-Black Reduction
+    meta::Union{Nothing, SolverCommon.ReductionMetadata} = nothing
+    K_full::Union{Nothing, SparseMatrixCSC{Tv,Ti}} = nothing
+    ξ_full::Union{Nothing, Vector{Tv}} = nothing
 
     # Solution quality
     ipm_iter::Int
@@ -129,11 +136,21 @@ function Tulip.KKT.setup(
     local θ = ones(Tv, n)
     local regP = ones(Tv, n)
     local regD = ones(Tv, m)
-    local ξ = zeros(Tv, m)
-    local K = sparse(A * A') + spdiagm(0 => regD)
+    local ξ_init = zeros(Tv, m)
+    local K_init = sparse(A * A') + spdiagm(0 => regD)
+
+    local meta = nothing
+    local K_to_factor = K_init
+    if bk.red_black
+        println("TulipApproxChol: Starting Red-Black reduction...")
+        t_pre = time()
+        meta = SolverCommon.get_reduction_metadata(m, SolverCommon.find_independent_set(sparse(A)))
+        K_to_factor, _ = SolverCommon.reduce_kkt_system(K_init, ξ_init, meta)
+        println("TulipApproxChol: Red-Black reduction complete ($(round(time()-t_pre, digits=4))s). Reduced nodes: $(m) -> $(meta.n_Sc)")
+    end
 
     local sddm_solve = approxchol_sddm(
-        sparse(Symmetric(K));
+        sparse(Symmetric(K_to_factor));
         params = bk.params,
         maxits = bk.pcg_maxits,
         tol = bk.pcg_tol,
@@ -149,9 +166,12 @@ function Tulip.KKT.setup(
         θ = θ,
         regP = regP,
         regD = regD,
-        K = K,
-        ξ = ξ,
+        K = K_to_factor,
+        ξ = zeros(Tv, size(K_to_factor, 1)),
         sddm_solve = sddm_solve,
+        meta = meta,
+        K_full = bk.red_black ? K_init : nothing,
+        ξ_full = bk.red_black ? ξ_init : nothing,
         ipm_iter = 0,
         solve_in_iter = 0,
         residual_history = Tuple{Int,Int,Tv,Tv}[],
@@ -196,7 +216,14 @@ function Tulip.KKT.update!(
 
     # Form normal equations matrix
     local D = spdiagm(one(Tv) ./ (kkt.θ .+ kkt.regP))
-    kkt.K = (kkt.A * D * kkt.A') + spdiagm(0 => kkt.regD)
+    local K_new = (kkt.A * D * kkt.A') + spdiagm(0 => kkt.regD)
+
+    if kkt.meta !== nothing
+        kkt.K_full = K_new
+        kkt.K, _ = SolverCommon.reduce_kkt_system(K_new, zeros(Tv, m), kkt.meta)
+    else
+        kkt.K = K_new
+    end
 
     kkt.sddm_solve = approxchol_sddm(
         sparse(Symmetric(kkt.K));
@@ -230,17 +257,30 @@ function Tulip.KKT.solve!(
     kkt.solve_in_iter += 1
 
     local d = one(Tv) ./ (kkt.θ .+ kkt.regP)
-    copyto!(kkt.ξ, ξp)
-    mul!(kkt.ξ, kkt.A, d .* ξd, true, true)
+    
+    # Form RHS
+    local target_ξ = (kkt.meta !== nothing) ? kkt.ξ_full : kkt.ξ
+    copyto!(target_ξ, ξp)
+    mul!(target_ξ, kkt.A, d .* ξd, true, true)
 
     # Solve normal equations
     local current_pcg_its = [0] # Initialize with a single element for pcg to set
-    dy .= kkt.sddm_solve(kkt.ξ; maxits = kkt.pcg_maxits, pcgIts = current_pcg_its)
+    if kkt.meta !== nothing
+        # Reduce
+        _, kkt.ξ = SolverCommon.reduce_kkt_system(kkt.K_full, kkt.ξ_full, kkt.meta)
+        dy_reduced = kkt.sddm_solve(kkt.ξ; maxits = kkt.pcg_maxits, pcgIts = current_pcg_its)
+        # Reconstruct
+        dy .= SolverCommon.reconstruct_solution(dy_reduced, kkt.K_full, kkt.ξ_full, kkt.meta)
+    else
+        dy .= kkt.sddm_solve(kkt.ξ; maxits = kkt.pcg_maxits, pcgIts = current_pcg_its)
+    end
     push!(kkt.pcg_iterations_history, current_pcg_its[1]) # Append the single iteration count
 
     # Compute relative residual norm
-    local absolute_residual_norm = norm(kkt.K * dy - kkt.ξ)
-    local rhs_norm = norm(kkt.ξ)
+    local K_actual = (kkt.meta !== nothing) ? kkt.K_full : kkt.K
+    local ξ_actual = (kkt.meta !== nothing) ? kkt.ξ_full : kkt.ξ
+    local absolute_residual_norm = norm(K_actual * dy - ξ_actual)
+    local rhs_norm = norm(ξ_actual)
     local relative_residual_norm =
         (rhs_norm == 0) ? absolute_residual_norm : absolute_residual_norm / rhs_norm
     push!(
@@ -311,6 +351,7 @@ function construct_tulip_model(
     kustom_params = get(config, "kustom_parameters", Dict())
     pcg_maxits = get(kustom_params, "pcg_maxits", 100)
     pcg_tol = get(kustom_params, "pcg_tol", 5e-8)
+    red_black = get(kustom_params, "RedBlack", false)
 
     approxchol_params_dict = get(kustom_params, "ApproxCholParams", Dict())
     approxchol_type = Symbol(get(approxchol_params_dict, "type", "deg"))
@@ -331,6 +372,7 @@ function construct_tulip_model(
             params = approxchol_params,
             pcg_maxits = pcg_maxits,
             pcg_tol = Tv(pcg_tol),
+            red_black = red_black,
         ),
     )
 
@@ -375,14 +417,54 @@ solver statistics.
   - `pcg_iterations_history`: A history of PCG iterations for each solve.
 """
 function solve(netw::Dimacs.McfpNet, config::Dict, float_type::Type{<:Number} = Float64)
-    lp = construct_tulip_model(netw, float_type, config)
+    # Check if we should use presolve (currently tied to RedBlack parameter)
+    kustom_params = get(config, "kustom_parameters", Dict())
+    use_presolve = get(kustom_params, "RedBlack", false)
+    
+    local mapping = nothing
+    local num_mapping = nothing
+    local active_netw = netw
+    
+    if use_presolve
+        println("TulipApproxChol: Running structural presolve...")
+        t_pre = time()
+        active_netw, mapping = SolverCommon.simplify_problem(netw)
+        
+        println("TulipApproxChol: Running numerical equilibration...")
+        t_num = time()
+        num_mapping, sc_costs, sc_caps, sc_demands = SolverCommon.equilibrate_problem(active_netw)
+        println("TulipApproxChol: Numerical equilibration complete ($(round(time()-t_num, digits=4))s). Obj scale: $(num_mapping.obj_scale)")
+        
+        active_netw = Dimacs.McfpNet(
+            G = active_netw.G,
+            Cost = float_type.(sc_costs),
+            Cap = float_type.(sc_caps),
+            Demand = float_type.(sc_demands)
+        )
+        
+        println("TulipApproxChol: Presolve complete ($(round(time()-t_pre, digits=4))s). Nodes: $(netw.G.n) -> $(active_netw.G.n)")
+    end
+
+    lp = construct_tulip_model(active_netw, float_type, config)
     Tulip.optimize!(lp)
 
     status = Tulip.get_attribute(lp, Tulip.Status())
     iters = Tulip.get_attribute(lp, Tulip.BarrierIterations())
     seconds = Tulip.get_attribute(lp, Tulip.SolutionTime())
-    solution = lp.solution.x
-    objective_value = Tulip.get_attribute(lp, Tulip.ObjectiveValue())
+    
+    # Reconstruct solution if presolved
+    raw_solution = lp.solution.x
+    if use_presolve
+        # 1. Unscale by Column Scales (Edges)
+        unscaled_x = raw_solution ./ num_mapping.col_scales
+        # 2. Reconstruct from structural reduction
+        solution = SolverCommon.reconstruct_flow(unscaled_x, mapping)
+        # 3. Objective value needs unscaling by obj_scale
+        objective_value = Tulip.get_attribute(lp, Tulip.ObjectiveValue()) * num_mapping.obj_scale
+    else
+        solution = raw_solution
+        objective_value = Tulip.get_attribute(lp, Tulip.ObjectiveValue())
+    end
 
     # Extract additional metrics from the solver timer
     to = lp.solver.timer

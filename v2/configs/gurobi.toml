@@ -1,0 +1,8 @@
+solver = "gurobi"
+precision = "Float64"
+verbose = true
+
+[parameters]
+# Gurobi parameters can be added here
+# e.g. "Method" = 2 (Barrier)
+Method = 2

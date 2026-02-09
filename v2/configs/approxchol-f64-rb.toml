@@ -1,0 +1,18 @@
+solver = "tulip_approxchol"
+precision = "Float64"
+
+[kustom_parameters]
+pcg_maxits = 100
+pcg_tol = 5e-8
+RedBlack = true
+
+[kustom_parameters.ApproxCholParams]
+type = "deg"
+stag_test = 0
+split = 2
+merge = 2
+
+[parameters]
+IPM_PRegMin = 1e-8
+IPM_DRegMin = 1e-8
+IPM_IterationsLimit = 200

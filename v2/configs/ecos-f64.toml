@@ -1,0 +1,10 @@
+solver = "ecos"
+precision = "Float64"
+verbose = true
+
+[parameters]
+verbose = true
+feastol = 1e-8
+abstol = 1e-8
+reltol = 1e-8
+maxit = 100

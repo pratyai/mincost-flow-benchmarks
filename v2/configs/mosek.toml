@@ -1,0 +1,7 @@
+solver = "mosek"
+precision = "Float64"
+verbose = true
+
+[parameters]
+# Mosek parameters can be added here
+# e.g. "MSK_DPAR_INTPNT_CO_TOL_PFEAS" = 1e-8
